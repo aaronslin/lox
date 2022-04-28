@@ -66,12 +66,21 @@ class Binary extends Expr {
     return "" + left + operator + right;
   }
 
-  static Object _add(Object left, Object right) {
-    if (left instanceof String && right instanceof String) {
-      return (String) left + (String) right;
+  static Object _add(Object leftObj, Object rightObj) {
+    if (leftObj instanceof String && rightObj instanceof String) {
+      return (String) leftObj + (String) rightObj;
     } else {
-      return toNum(left) + toNum(right);
+      return toNum(leftObj) + toNum(rightObj);
     }
+  }
+
+  static boolean _equals(Object leftObj, Object rightObj) {
+    if (leftObj == null && rightObj == null) {
+      return true;
+    } else if (leftObj == null || rightObj == null) {
+      return false;
+    }
+    return leftObj.equals(rightObj);
   }
 
   @Override
@@ -109,11 +118,9 @@ class Binary extends Expr {
 
         // Supported: everything. Note that 1!=true
         case BANG_EQUAL: 
-          return !leftVal.equals(rightVal);
+          return !_equals(leftVal, rightVal);
         case EQUAL_EQUAL: 
-          System.out.println(leftVal);
-          System.out.println(rightVal);
-          return leftVal.equals(rightVal);
+          return _equals(leftVal, rightVal);
         default:
           throw new InterpreterException(String.format("Operator %s is not supported.", operator.type));
       }
