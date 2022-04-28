@@ -50,12 +50,16 @@ public class Lox {
       List<Expr> expressions = Parser.parseTokens(tokens);
       for (Expr expr : expressions) {
         expr.print();
+        Object result = expr.evaluate();
+        System.out.printf("Value: %s%n", result);
       }
     } catch (ParserException e) {
       System.out.printf("ERROR: %s%n", e.getMessage());
       e.printStackTrace();
+    } catch (InterpreterException e) {
+      System.out.printf("ERROR: %s%n", e.getMessage());
+      e.printStackTrace();
     }
-
   }
 
   static void error(int line, String message) {

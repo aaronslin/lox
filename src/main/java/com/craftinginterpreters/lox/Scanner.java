@@ -110,8 +110,12 @@ class Scanner {
 
     String text = source.substring(start, current);
     TokenType type = keywords.get(text);
+    Object value = null;
     if (type == null) type = IDENTIFIER;
-    addToken(type);
+    if (type == TRUE) value = new Boolean(true);
+    if (type == FALSE) value = new Boolean(false);
+
+    addToken(type, value);
   }
   private void number() {
     while (isDigit(peek())) advance();

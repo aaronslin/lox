@@ -42,12 +42,14 @@ public class Parser {
       TokenType.MINUS
     ),
     ImmutableList.of(
-      TokenType.BANG_EQUAL,
-      TokenType.EQUAL_EQUAL,
       TokenType.GREATER_EQUAL,
       TokenType.LESS_EQUAL,
       TokenType.GREATER,
       TokenType.LESS
+    ),
+    ImmutableList.of(
+      TokenType.BANG_EQUAL,
+      TokenType.EQUAL_EQUAL
     ),
     ImmutableList.of(
       TokenType.AND,
@@ -263,7 +265,9 @@ public class Parser {
       Lexeme lexeme = unparsed.get(i);
       if (lexeme instanceof Token) {
         Token token = (Token) lexeme;
-        if (UNARY_TYPES.contains(token.type) && prev != null && i>0 && !(unparsed.get(i-1) instanceof Expr)) {
+        if (UNARY_TYPES.contains(token.type) 
+            && prev != null 
+            && (i==0 || !(unparsed.get(i-1) instanceof Expr))) {
           Unary expr = new Unary(token, prev);
           prev = expr;
           continue;

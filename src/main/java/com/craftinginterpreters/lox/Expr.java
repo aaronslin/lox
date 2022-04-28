@@ -4,7 +4,31 @@ import java.util.Arrays;
 import java.util.List;
 
 abstract class Expr extends Lexeme {
-  // abstract public Object interpret();
+  abstract public Object evaluate();
+
+  static double toNum(Object obj) {
+    if (obj == null) {
+      return 0.0;
+    } else if (obj instanceof Double) {
+      return (double) obj;
+    } else if (obj instanceof Boolean) {
+      return ((boolean) obj ? 1.0 : 0.0);
+    } else {
+      throw new InterpreterCastException("Cannot cast to double.", obj);
+    }
+  }
+
+  static boolean toBool(Object obj) {
+    if (obj == null) {
+      return false;
+    } else if (obj instanceof Double) {
+      return ((double) obj) != 0;
+    } else if (obj instanceof Boolean) {
+      return (boolean) obj;
+    } else {
+      throw new InterpreterCastException("Cannot cast to boolean.", obj);
+    }
+  }
 }
 
 class Empty extends Expr {
@@ -16,7 +40,13 @@ class Empty extends Expr {
   public String toString() {
     return "[]";
   }
+
+  @Override
+  public Object evaluate() {
+    return null;
+  }
 }
+
 
 class Binary extends Expr {
   Binary(Expr left, Token operator, Expr right) {
@@ -36,10 +66,70 @@ class Binary extends Expr {
     return "" + left + operator + right;
   }
 
-  // @Override
-  // public Object interpret() {
-  //   
-  // }
+  static Object _add(Object left, Object right) {
+    if (left instanceof String && right instanceof String) {
+      return (String) left + (String) right;
+    } else {
+      return toNum(left) + toNum(right);
+    }
+  }
+
+  @Override
+  public Object evaluate() {
+    Object leftVal = left.evaluate();
+    Object rightVal = right.evaluate();
+    
+    try {
+      switch(operator.type) {
+        // Supported: numerical, except PLUS
+        case SLASH: 
+          return toNum(leftVal) / toNum(rightVal);
+        case STAR: 
+          return toNum(leftVal) * toNum(rightVal);
+        case PLUS: 
+          return _add(leftVal, rightVal);
+        case MINUS: 
+          return toNum(leftVal) - toNum(rightVal);
+
+        // Supported: numerical
+        case GREATER_EQUAL:
+          return toNum(leftVal) >= toNum(rightVal);
+        case LESS_EQUAL: 
+          return toNum(leftVal) <= toNum(rightVal);
+        case GREATER: 
+          return toNum(leftVal) > toNum(rightVal);
+        case LESS: 
+          return toNum(leftVal) < toNum(rightVal);
+
+        // Supported: (bool, bool)
+        case AND:
+          return toBool(leftVal) && toBool(rightVal);
+        case OR: 
+          return toBool(leftVal) || toBool(rightVal);
+
+        // Supported: everything. Note that 1!=true
+        case BANG_EQUAL: 
+          return !leftVal.equals(rightVal);
+        case EQUAL_EQUAL: 
+          System.out.println(leftVal);
+          System.out.println(rightVal);
+          return leftVal.equals(rightVal);
+        default:
+          throw new InterpreterException(String.format("Operator %s is not supported.", operator.type));
+      }
+    } catch (InterpreterCastException e) {
+      throw new InterpreterException(String.format(
+        "Binary operator %s cannot be applied to expression %s of type %s.", 
+        operator.lexeme, 
+        e.obj,
+        e.obj.getClass().getName()
+      ));
+    }
+    // Cases: String, Nil, Number, Boolean
+    // Equality: ???
+    // Comparison: check type equality?
+    // Mult/Add: return bool if both_bool else double?
+  }
 }
 
 class Unary extends Expr {
@@ -57,17 +147,31 @@ class Unary extends Expr {
     return "" + operator + expr;
   }
 
-  // @Override
-  // public Object interpret() {
-  //   Object exprValue = expr.interpret();
-  //   if (exprValue instanceof Boolean && operator.type == TokenType.BANG) {
-  //     return !exprValue;
-  //   } else if (exprValue instanceof Double && operator.type == TokenType.MINUS) {
-  //     return -exprValue;
-  //   } else {
-  //     throw new InterpreterError("something");
-  //   }
-  // }
+  @Override
+  public Object evaluate() {
+    Object exprValue = expr.evaluate();
+    try {
+      if (operator.type == TokenType.BANG) {
+        return !toBool(exprValue);
+      } else if (operator.type == TokenType.MINUS) {
+        return -toNum(exprValue);
+      } else {
+        throw new InterpreterException(String.format(
+          "Unary operator %s not supported for expression %s of type %s.",
+          operator.lexeme,
+          exprValue,
+          exprValue.getClass().getName()
+        ));
+      }
+    } catch (InterpreterCastException e) {
+      throw new InterpreterException(String.format(
+        "Unary operator %s cannot be applied to expression %s of type %s.", 
+        operator.lexeme, 
+        e.obj,
+        e.obj.getClass().getName()
+      ));
+    }
+  }
 }
 
 class Grouping extends Expr {
@@ -87,10 +191,10 @@ class Grouping extends Expr {
     return "" + left + expr + right;
   }
 
-  // @Override
-  // public Object interpret() {
-  //   return expr.interpret();
-  // }
+  @Override
+  public Object evaluate() {
+    return expr.evaluate();
+  }
 }
 
 class Literal extends Expr {
@@ -106,11 +210,35 @@ class Literal extends Expr {
     return "" + token;
   }
 
-  // // (alin) test this! What are the potential types that can be returned here?
-  // @Override
-  // public Object interpret() {
-  //   return token.literal;
-  // }
+  // (alin) test this! What are the potential types that can be returned here?
+  @Override
+  public Object evaluate() {
+    return token.literal;
+  }
+}
+
+class InterpreterCastException extends RuntimeException {
+  Object obj;
+
+  public InterpreterCastException(String message, Object obj) {
+    super(message);
+    this.obj = obj;
+  }
+}
+
+class InterpreterException extends RuntimeException {
+  String code;
+  int column;
+
+  public InterpreterException(String message, String code, int column) {
+    super(message);
+    this.code = code;
+    this.column = column;
+  }
+
+  public InterpreterException(String message) {
+    this(message, "", -1);
+  }
 }
 
 /*
