@@ -3,7 +3,7 @@ package com.craftinginterpreters.lox;
 import java.util.Arrays;
 import java.util.List;
 
-abstract class Lexeme {
+abstract class Printable {
   public List<Lexeme> children;
 
   public void printClass(String prefix, String text) {
@@ -25,6 +25,11 @@ abstract class Lexeme {
     }
   }
 }
+
+// (alin) This distinction between Lexeme and Printable isn't needed
+// but I want to use the print class for Statements, which conceptually aren't lexemes
+// but also don't want to refactor out Lexeme's yet.
+abstract class Lexeme extends Printable { }
 
 class Token extends Lexeme {
   final TokenType type;

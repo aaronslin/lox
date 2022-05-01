@@ -13,11 +13,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class Parser {
-  final static List<TokenType> DELIMIT_TYPES = ImmutableList.of(
-    TokenType.EOF,
-    TokenType.SEMICOLON
-  );
-
   final static List<TokenType> LITERAL_TYPES = ImmutableList.of(
     TokenType.NUMBER,
     TokenType.STRING,
@@ -68,29 +63,43 @@ public class Parser {
       }
     }
   }
-    
-  public static List<Expr> parseTokens(List<Token> tokens) {
-    List<Expr> expressions = new ArrayList<>();
+
+  public static List<Statement> parseProgram(List<Token> tokens) {
+    List<Statement> statements = new ArrayList<>();
     List<Token> line = new ArrayList<>();
 
     if (tokens.size() == 0) {
-      expressions.add(new Empty());
-      return expressions;
+      // (alin) this could cause trouble later on if you have Statement(Empty()) and EmptyStatement()
+      // and you only error handle one of these
+      statements.add(new ExprStmt(new Empty()));
+      return statements;
     }
 
     for (Token token : tokens) {
-      if (DELIMIT_TYPES.contains(token.type)) {
-        expressions.add(parseLine(line));
+      if (token.type == TokenType.SEMICOLON) {
+        statements.add(parseStmt(line));
         line.clear();
+      } else if (token.type == TokenType.EOF) {
+        break;
       } else {
         line.add(token);
       }
     }
-    
-    return expressions;
+
+    if (line.size() > 0) {
+      throw new ParserException(String.format("Reached EOF but found tokens %s.", line));
+    }
+    return statements;
   }
 
-  public static Expr parseLine(List<Token> tokens) {
+  private static Statement parseStmt(List<Token> tokens) {
+    if (tokens.size() > 0 && tokens.get(0).type == TokenType.PRINT) {
+      return new PrintStmt(parseExpr(tokens.subList(1, tokens.size())));
+    }
+    return new ExprStmt(parseExpr(tokens));
+  }
+
+  private static Expr parseExpr(List<Token> tokens) {
     /* 
     Assumes:
      * No EOF in input.

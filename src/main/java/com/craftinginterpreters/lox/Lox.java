@@ -47,17 +47,15 @@ public class Lox {
     List<Token> tokens = scanner.scanTokens();
 
     try {
-      List<Expr> expressions = Parser.parseTokens(tokens);
-      for (Expr expr : expressions) {
-        expr.print();
-        Object result = expr.evaluate();
-        System.out.printf("Value: %s%n", result);
+      List<Statement> statements = Parser.parseProgram(tokens);
+      for (Statement stmt : statements) {
+        stmt.execute();
       }
     } catch (ParserException e) {
-      System.out.printf("ERROR: %s%n", e.getMessage());
+      System.out.printf("Parse Error: %s%n", e.getMessage());
       e.printStackTrace();
     } catch (InterpreterException e) {
-      System.out.printf("ERROR: %s%n", e.getMessage());
+      System.out.printf("Interpreter Error: %s%n", e.getMessage());
       e.printStackTrace();
     }
   }
