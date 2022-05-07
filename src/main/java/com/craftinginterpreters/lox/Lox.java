@@ -12,7 +12,11 @@ import java.util.Optional;
 
 public class Lox {
   static boolean hadError = false;
+  static Interpreter interpreter;
+
   public static void main(String[] args) throws IOException {
+    interpreter = new Interpreter();
+
     if (args.length > 1) {
       System.out.println("Usage: jlox [script]");
       System.exit(64); // [64]
@@ -43,19 +47,16 @@ public class Lox {
   }
   private static void run(String source) {
     Scanner scanner = new Scanner(source);
-
     List<Token> tokens = scanner.scanTokens();
 
     try {
-      List<Statement> statements = Parser.parseProgram(tokens);
+      Parser parser = new Parser(tokens);
+      List<Statement> statements = parser.parseProgram();
       for (Statement stmt : statements) {
-        stmt.execute();
+        interpreter.execute(stmt);
       }
-    } catch (ParserException e) {
-      System.out.printf("Parse Error: %s%n", e.getMessage());
-      e.printStackTrace();
-    } catch (InterpreterException e) {
-      System.out.printf("Interpreter Error: %s%n", e.getMessage());
+    } catch (Exception e) {
+      System.out.printf("%s%n", e.getMessage());
       e.printStackTrace();
     }
   }

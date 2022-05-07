@@ -4,14 +4,15 @@ import java.util.Arrays;
 import java.util.List;
 
 abstract class Printable {
-  public List<Lexeme> children;
+  public List<Printable> children;
 
   public void printClass(String prefix, String text) {
     System.out.printf(prefix + this.getClass().getSimpleName() + ": " + text + "%n");
   }
 
   public void print() {
-    System.out.println(".");
+    String caller = Thread.currentThread().getStackTrace()[2].getMethodName();
+    System.out.println(caller);
     print("", true);
   }
 
@@ -29,7 +30,7 @@ abstract class Printable {
 // (alin) This distinction between Lexeme and Printable isn't needed
 // but I want to use the print class for Statements, which conceptually aren't lexemes
 // but also don't want to refactor out Lexeme's yet.
-abstract class Lexeme extends Printable { }
+abstract class Lexeme extends Printable {}
 
 class Token extends Lexeme {
   final TokenType type;

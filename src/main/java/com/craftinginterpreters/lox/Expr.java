@@ -4,31 +4,16 @@ import java.util.Arrays;
 import java.util.List;
 
 abstract class Expr extends Lexeme {
-  abstract public Object evaluate();
+  abstract public Object evaluateWith(Visitor<Object> visitor);
 
-  static double toNum(Object obj) {
-    if (obj == null) {
-      return 0.0;
-    } else if (obj instanceof Double) {
-      return (double) obj;
-    } else if (obj instanceof Boolean) {
-      return ((boolean) obj ? 1.0 : 0.0);
-    } else {
-      throw new InterpreterCastException("Cannot cast to double.", obj);
-    }
-  }
-
-  static boolean toBool(Object obj) {
-    if (obj == null) {
-      return false;
-    } else if (obj instanceof Double) {
-      return ((double) obj) != 0;
-    } else if (obj instanceof Boolean) {
-      return (boolean) obj;
-    } else {
-      throw new InterpreterCastException("Cannot cast to boolean.", obj);
-    }
-  }
+  interface Visitor<T> { 
+    // not sure why these methods need to be defined
+    public T evalEmptyExpr(Empty empty);
+    public T evalBinaryExpr(Binary binary);
+    public T evalUnaryExpr(Unary unary);
+    public T evalGroupingExpr(Grouping grouping);
+    public T evalLiteralExpr(Literal literal);
+  };
 }
 
 class Empty extends Expr {
@@ -42,8 +27,8 @@ class Empty extends Expr {
   }
 
   @Override
-  public Object evaluate() {
-    return null;
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalEmptyExpr(this);
   }
 }
 
@@ -66,76 +51,9 @@ class Binary extends Expr {
     return "" + left + operator + right;
   }
 
-  static Object _add(Object leftObj, Object rightObj) {
-    if (leftObj instanceof String && rightObj instanceof String) {
-      return (String) leftObj + (String) rightObj;
-    } else {
-      return toNum(leftObj) + toNum(rightObj);
-    }
-  }
-
-  static boolean _equals(Object leftObj, Object rightObj) {
-    if (leftObj == null && rightObj == null) {
-      return true;
-    } else if (leftObj == null || rightObj == null) {
-      return false;
-    }
-    return leftObj.equals(rightObj);
-  }
-
   @Override
-  public Object evaluate() {
-    Object leftVal = left.evaluate();
-    Object rightVal = right.evaluate();
-    
-    try {
-      switch(operator.type) {
-        // Supported: numerical, except PLUS
-        case SLASH: 
-          return toNum(leftVal) / toNum(rightVal);
-        case STAR: 
-          return toNum(leftVal) * toNum(rightVal);
-        case PLUS: 
-          return _add(leftVal, rightVal);
-        case MINUS: 
-          return toNum(leftVal) - toNum(rightVal);
-
-        // Supported: numerical
-        case GREATER_EQUAL:
-          return toNum(leftVal) >= toNum(rightVal);
-        case LESS_EQUAL: 
-          return toNum(leftVal) <= toNum(rightVal);
-        case GREATER: 
-          return toNum(leftVal) > toNum(rightVal);
-        case LESS: 
-          return toNum(leftVal) < toNum(rightVal);
-
-        // Supported: (bool, bool)
-        case AND:
-          return toBool(leftVal) && toBool(rightVal);
-        case OR: 
-          return toBool(leftVal) || toBool(rightVal);
-
-        // Supported: everything. Note that 1!=true
-        case BANG_EQUAL: 
-          return !_equals(leftVal, rightVal);
-        case EQUAL_EQUAL: 
-          return _equals(leftVal, rightVal);
-        default:
-          throw new InterpreterException(String.format("Operator %s is not supported.", operator.type));
-      }
-    } catch (InterpreterCastException e) {
-      throw new InterpreterException(String.format(
-        "Binary operator %s cannot be applied to expression %s of type %s.", 
-        operator.lexeme, 
-        e.obj,
-        e.obj.getClass().getName()
-      ));
-    }
-    // Cases: String, Nil, Number, Boolean
-    // Equality: ???
-    // Comparison: check type equality?
-    // Mult/Add: return bool if both_bool else double?
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalBinaryExpr(this);
   }
 }
 
@@ -155,29 +73,8 @@ class Unary extends Expr {
   }
 
   @Override
-  public Object evaluate() {
-    Object exprValue = expr.evaluate();
-    try {
-      if (operator.type == TokenType.BANG) {
-        return !toBool(exprValue);
-      } else if (operator.type == TokenType.MINUS) {
-        return -toNum(exprValue);
-      } else {
-        throw new InterpreterException(String.format(
-          "Unary operator %s not supported for expression %s of type %s.",
-          operator.lexeme,
-          exprValue,
-          exprValue.getClass().getName()
-        ));
-      }
-    } catch (InterpreterCastException e) {
-      throw new InterpreterException(String.format(
-        "Unary operator %s cannot be applied to expression %s of type %s.", 
-        operator.lexeme, 
-        e.obj,
-        e.obj.getClass().getName()
-      ));
-    }
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalUnaryExpr(this);
   }
 }
 
@@ -199,8 +96,8 @@ class Grouping extends Expr {
   }
 
   @Override
-  public Object evaluate() {
-    return expr.evaluate();
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalGroupingExpr(this);
   }
 }
 
@@ -217,34 +114,9 @@ class Literal extends Expr {
     return "" + token;
   }
 
-  // (alin) test this! What are the potential types that can be returned here?
   @Override
-  public Object evaluate() {
-    return token.literal;
-  }
-}
-
-class InterpreterCastException extends RuntimeException {
-  Object obj;
-
-  public InterpreterCastException(String message, Object obj) {
-    super(message);
-    this.obj = obj;
-  }
-}
-
-class InterpreterException extends RuntimeException {
-  String code;
-  int column;
-
-  public InterpreterException(String message, String code, int column) {
-    super(message);
-    this.code = code;
-    this.column = column;
-  }
-
-  public InterpreterException(String message) {
-    this(message, "", -1);
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalLiteralExpr(this);
   }
 }
 

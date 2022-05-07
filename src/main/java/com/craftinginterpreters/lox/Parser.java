@@ -16,6 +16,7 @@ public class Parser {
   final static List<TokenType> LITERAL_TYPES = ImmutableList.of(
     TokenType.NUMBER,
     TokenType.STRING,
+    TokenType.IDENTIFIER,
     TokenType.TRUE,
     TokenType.FALSE,
     TokenType.NIL
@@ -54,6 +55,14 @@ public class Parser {
 
   final static boolean isDebug = false;
 
+  int index;
+  List<Token> tokens;
+
+  Parser(List<Token> tokens) {
+    this.index = 0;
+    this.tokens = tokens;
+  }
+
   private static void print(List<Lexeme> lexemes) {
     if (isDebug) {
       String caller = Thread.currentThread().getStackTrace()[2].getMethodName();
@@ -64,42 +73,107 @@ public class Parser {
     }
   }
 
-  public static List<Statement> parseProgram(List<Token> tokens) {
-    List<Statement> statements = new ArrayList<>();
-    List<Token> line = new ArrayList<>();
-
-    if (tokens.size() == 0) {
-      // (alin) this could cause trouble later on if you have Statement(Empty()) and EmptyStatement()
-      // and you only error handle one of these
-      statements.add(new ExprStmt(new Empty()));
-      return statements;
-    }
-
-    for (Token token : tokens) {
-      if (token.type == TokenType.SEMICOLON) {
-        statements.add(parseStmt(line));
-        line.clear();
-      } else if (token.type == TokenType.EOF) {
-        break;
-      } else {
-        line.add(token);
+  private void printCurrent() {
+    if (isDebug) {
+      String caller = Thread.currentThread().getStackTrace()[2].getMethodName();
+      System.out.printf("%s:%n", caller);
+      for (int i=0; i<tokens.size(); i++) {
+        String open = " ";
+        String close = " ";
+        if (i == index) {
+          open = "[";
+          close = "]";
+        }
+        System.out.println("└─" + open + tokens.get(i) + close);
       }
     }
+  }
 
-    if (line.size() > 0) {
-      throw new ParserException(String.format("Reached EOF but found tokens %s.", line));
+  private Void until(TokenType terminalType) {
+    /* Find the first `terminalType` token from the current `index` (inclusive)
+    and set the `index` to the token after it. */
+    while (index < tokens.size()) {
+      if (tokens.get(index).type == terminalType) {
+        index += 1;
+        return null;
+      }
+      index += 1;
+    }
+    throw new ParserException(String.format("Reached EOF without finding %s token.", terminalType));
+  }
+
+  public List<Statement> parseProgram() {
+    printCurrent();
+    List<Statement> statements = new ArrayList<>();
+    
+    while (index < tokens.size()) {
+      if (tokens.get(index).type == TokenType.EOF) {
+        break;
+      }
+      statements.add(parseBlock());
     }
     return statements;
+  }
+
+  private Statement parseBlock() {
+    printCurrent();
+    if (tokens.get(index).type == TokenType.LEFT_BRACE) {
+      int start = index;
+      until(TokenType.RIGHT_BRACE);
+      Parser parser = new Parser(tokens.subList(start+1, index-1));
+      return new BlockStmt(parser.parseProgram());
+    }
+
+    return parseLine();
+  }
+
+  private Statement parseLine() {
+    printCurrent();
+    int start = index;
+    until(TokenType.SEMICOLON);
+    return parseStmt(tokens.subList(start, index-1));
   }
 
   private static Statement parseStmt(List<Token> tokens) {
     if (tokens.size() > 0 && tokens.get(0).type == TokenType.PRINT) {
       return new PrintStmt(parseExpr(tokens.subList(1, tokens.size())));
+    } else if (tokens.size() > 1
+            && tokens.get(0).type == TokenType.VAR
+            && tokens.get(1).type == TokenType.IDENTIFIER) {
+      List<Token> rhs = tokens.subList(2, tokens.size());
+
+      if (rhs.size() == 0) {
+        return _parseAssign(tokens.get(1), new Empty());
+      } else if (rhs.get(0).type == TokenType.EQUAL) {
+        return _parseAssign(tokens.get(1), rhs.subList(1, rhs.size()));
+      }
+      throw new ParserException(String.format(
+        "Assignment must contain an '=' followed by expression, but found %s.", 
+        tokens
+      ));
+    } else if (tokens.size() > 1
+            && tokens.get(0).type == TokenType.IDENTIFIER
+            && tokens.get(1).type == TokenType.EQUAL) {
+      return _parseAssign(tokens.get(0), tokens.subList(2, tokens.size()));
     }
     return new ExprStmt(parseExpr(tokens));
   }
 
-  private static Expr parseExpr(List<Token> tokens) {
+  private static Statement _parseAssign(Token varName, List<Token> tokens) {
+    if (tokens.size() == 0) {
+      throw new ParserException(String.format("Cannot assign variable '%s' to an empty expression.", varName));
+    }
+    return _parseAssign(varName, parseExpr(tokens));
+  }
+
+  private static Statement _parseAssign(Token varName, Expr expr) {
+    return new AssignStmt(
+      varName.literal.toString(), 
+      new Variable(expr)
+    );
+  }
+
+  public static Expr parseExpr(List<Token> tokens) {
     /* 
     Assumes:
      * No EOF in input.

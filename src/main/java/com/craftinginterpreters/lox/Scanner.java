@@ -111,7 +111,10 @@ class Scanner {
     String text = source.substring(start, current);
     TokenType type = keywords.get(text);
     Object value = null;
-    if (type == null) type = IDENTIFIER;
+    if (type == null) {
+      value = text;
+      type = IDENTIFIER;
+    }
     if (type == TRUE) value = new Boolean(true);
     if (type == FALSE) value = new Boolean(false);
 
