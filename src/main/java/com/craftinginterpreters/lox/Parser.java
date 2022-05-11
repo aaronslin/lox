@@ -16,7 +16,6 @@ public class Parser {
   final static List<TokenType> LITERAL_TYPES = ImmutableList.of(
     TokenType.NUMBER,
     TokenType.STRING,
-    TokenType.IDENTIFIER,
     TokenType.TRUE,
     TokenType.FALSE,
     TokenType.NIL
@@ -73,7 +72,7 @@ public class Parser {
     }
   }
 
-  private void printCurrent() {
+  private void _printCurrent() {
     if (isDebug) {
       String caller = Thread.currentThread().getStackTrace()[2].getMethodName();
       System.out.printf("%s:%n", caller);
@@ -87,6 +86,22 @@ public class Parser {
         System.out.println("└─" + open + tokens.get(i) + close);
       }
     }
+  }
+
+  private Token consume() {
+    // Are there Indexoutofbounds errors here?
+    Token token = tokens.get(index);
+    index += 1;
+    return token;
+  }
+
+  private boolean match(TokenType type) {
+    // Are there Indexoutofbounds errors here?
+    if (tokens.get(index).type == type) {
+      index += 1;
+      return true;
+    }
+    return false;
   }
 
   private Void until(TokenType terminalType) {
@@ -103,7 +118,7 @@ public class Parser {
   }
 
   public List<Statement> parseProgram() {
-    printCurrent();
+    _printCurrent();
     List<Statement> statements = new ArrayList<>();
     
     while (index < tokens.size()) {
@@ -116,7 +131,7 @@ public class Parser {
   }
 
   private Statement parseBlock() {
-    printCurrent();
+    _printCurrent();
     if (tokens.get(index).type == TokenType.LEFT_BRACE) {
       int start = index;
       until(TokenType.RIGHT_BRACE);
@@ -124,54 +139,100 @@ public class Parser {
       return new BlockStmt(parser.parseProgram());
     }
 
-    return parseLine();
+    return parseDeclaration();
   }
 
-  private Statement parseLine() {
-    printCurrent();
+  private Statement parseDeclaration() {
+    if (match(TokenType.VAR)) {
+      Token token = consume();
+
+      if (token.type != TokenType.IDENTIFIER) {
+        throw new ParserException("Keyword 'var' must be followed by an identifier.");
+      }
+      String name = token.literal.toString();
+
+      if (match(TokenType.EQUAL)) {
+        int start = index;
+        until(TokenType.SEMICOLON);
+        // this will succeed on `var x = ;`
+        // but the problem here is due to the existince of Empty()
+        // `var x = ();` also passes, and the parser cannot distinguish this
+        // so I will simply allow it.
+        Expr rhs = parseExpr(tokens.subList(start, index-1));
+        return new AssignStmt(name, rhs);
+      } else if (match(TokenType.SEMICOLON)) {
+        return new AssignStmt(name, new Empty());
+      } else {
+        throw new ParserException("Invalid assignment initializer.");
+      }
+    }
+    // For now, this parser does not support `a=b`. Only `var a=b`.
+
+    return parsePrint();
+  }
+
+  private Statement parsePrint() {
+    _printCurrent();
+    if (tokens.get(index).type == TokenType.PRINT) {
+      int start = index;
+      until(TokenType.SEMICOLON);
+      return new PrintStmt(parseExpr(tokens.subList(start+1, index-1)));
+    }
+    return parseExprStmt();
+  }
+
+  private Statement parseExprStmt() {
+    _printCurrent();
     int start = index;
     until(TokenType.SEMICOLON);
-    return parseStmt(tokens.subList(start, index-1));
+    return new ExprStmt(parseExpr(tokens.subList(start, index-1)));
   }
 
-  private static Statement parseStmt(List<Token> tokens) {
-    if (tokens.size() > 0 && tokens.get(0).type == TokenType.PRINT) {
-      return new PrintStmt(parseExpr(tokens.subList(1, tokens.size())));
-    } else if (tokens.size() > 1
-            && tokens.get(0).type == TokenType.VAR
-            && tokens.get(1).type == TokenType.IDENTIFIER) {
-      List<Token> rhs = tokens.subList(2, tokens.size());
+  // private Statement parseLine() {
+  //   _printCurrent();
+  //   int start = index;
+  //   until(TokenType.SEMICOLON);
+  //   return parseStmt(tokens.subList(start, index-1));
+  // }
 
-      if (rhs.size() == 0) {
-        return _parseAssign(tokens.get(1), new Empty());
-      } else if (rhs.get(0).type == TokenType.EQUAL) {
-        return _parseAssign(tokens.get(1), rhs.subList(1, rhs.size()));
-      }
-      throw new ParserException(String.format(
-        "Assignment must contain an '=' followed by expression, but found %s.", 
-        tokens
-      ));
-    } else if (tokens.size() > 1
-            && tokens.get(0).type == TokenType.IDENTIFIER
-            && tokens.get(1).type == TokenType.EQUAL) {
-      return _parseAssign(tokens.get(0), tokens.subList(2, tokens.size()));
-    }
-    return new ExprStmt(parseExpr(tokens));
-  }
+  // private static Statement parseStmt(List<Token> tokens) {
+  //   // if (tokens.size() > 0 && tokens.get(0).type == TokenType.PRINT) {
+  //   //   return new PrintStmt(parseExpr(tokens.subList(1, tokens.size())));
+  //   } else if (tokens.size() > 1
+  //           && tokens.get(0).type == TokenType.VAR
+  //           && tokens.get(1).type == TokenType.IDENTIFIER) {
+  //     List<Token> rhs = tokens.subList(2, tokens.size());
 
-  private static Statement _parseAssign(Token varName, List<Token> tokens) {
-    if (tokens.size() == 0) {
-      throw new ParserException(String.format("Cannot assign variable '%s' to an empty expression.", varName));
-    }
-    return _parseAssign(varName, parseExpr(tokens));
-  }
+  //     if (rhs.size() == 0) {
+  //       return _parseAssign(tokens.get(1), new Empty());
+  //     } else if (rhs.get(0).type == TokenType.EQUAL) {
+  //       return _parseAssign(tokens.get(1), rhs.subList(1, rhs.size()));
+  //     }
+  //     throw new ParserException(String.format(
+  //       "Assignment must contain an '=' followed by expression, but found %s.", 
+  //       tokens
+  //     ));
+  //   } else if (tokens.size() > 1
+  //           && tokens.get(0).type == TokenType.IDENTIFIER
+  //           && tokens.get(1).type == TokenType.EQUAL) {
+  //     return _parseAssign(tokens.get(0), tokens.subList(2, tokens.size()));
+  //   }
+  //   // return new ExprStmt(parseExpr(tokens));
+  // }
 
-  private static Statement _parseAssign(Token varName, Expr expr) {
-    return new AssignStmt(
-      varName.literal.toString(), 
-      new Variable(expr)
-    );
-  }
+  // private static Statement _parseAssign(Token varName, List<Token> tokens) {
+  //   if (tokens.size() == 0) {
+  //     throw new ParserException(String.format("Cannot assign variable '%s' to an empty expression.", varName));
+  //   }
+  //   return _parseAssign(varName, parseExpr(tokens));
+  // }
+
+  // private static Statement _parseAssign(Token varName, Expr expr) {
+  //   return new AssignStmt(
+  //     varName.literal.toString(), 
+  //     new Variable(expr)
+  //   );
+  // }
 
   public static Expr parseExpr(List<Token> tokens) {
     /* 
@@ -195,6 +256,11 @@ public class Parser {
       // Match literals and cast them to Exprs
       if (LITERAL_TYPES.contains(token.type)) {
         lexemes.add(new Literal(token));
+        continue;
+      }
+
+      if (token.type == TokenType.IDENTIFIER) {
+        lexemes.add(new Var(token.literal.toString()));
         continue;
       }
 
@@ -244,6 +310,7 @@ public class Parser {
 
     lexemes = _parseUnary(lexemes);
     lexemes = _parseBinary(lexemes);
+    lexemes = _parseAssign(lexemes);
 
     if (lexemes.size() > 1) {
       throw new ParserException(String.format(
@@ -254,6 +321,24 @@ public class Parser {
     }
     print(lexemes);
     return (Expr) lexemes.get(0);
+  }
+
+  private static List<Lexeme> _parseAssign(List<Lexeme> lexemes) {
+    if (lexemes.size() < 2) {
+      return lexemes;
+    }
+
+    if (lexemes.get(0) instanceof Var) {
+      Var name = (Var) lexemes.get(0);
+      if (lexemes.get(1) instanceof Token) {
+        Token token = (Token) lexemes.get(1);
+        if (token.type == TokenType.EQUAL) {
+          Expr rhs = parseGroup(lexemes.subList(2, lexemes.size()));
+          return ImmutableList.of(new Assign(name.name, rhs));
+        }
+      }
+    }
+    throw new ParserException(String.format("Cannot parse assignment for %s.", lexemes));
   }
 
   private static List<Lexeme> _parseBinary(List<Lexeme> lexemes) {
@@ -461,11 +546,17 @@ Ch. 7 Notes:
 program -> statement* EOF
 statement -> { statement* }
 
+statement -> VAR IDENT (= expression)?;
+statement -> IF grouping statement
+statement -> WHILE grouping statement
+statement -> FOR (decl; expr; expr) statement
+
 statement -> expression ;
 statement -> PRINT expression ;
-statement -> (var)? IDENT (= expression)?;
 
-expression     → equality ;
+
+expression     → assignment ;
+assignment     → IDENT = expression | equality ;
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term           → factor ( ( "-" | "+" ) factor )* ;

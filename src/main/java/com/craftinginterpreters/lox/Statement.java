@@ -43,18 +43,18 @@ class PrintStmt extends Statement {
 }
 
 class AssignStmt extends Statement {
-  AssignStmt(String name, Variable variable) {
+  AssignStmt(String name, Expr expr) {
     this.name = name;
-    this.variable = variable;
+    this.expr = expr;
     // (alin) commenting out scope for now -- not sure if this belongs to stmt
     // or the interpreter
     // this.scope = scope;
     // (alin) to revisit
-    this.children = Arrays.asList(variable);
+    this.children = Arrays.asList(expr);
   }
 
   final String name;
-  final Variable variable;
+  final Expr expr;
   // final Scope scope;
 
   public Void executeWith(Statement.Visitor<Void> visitor) {
@@ -86,7 +86,6 @@ class Scope extends Printable {
   final Map<String, Variable> locals;
 
   public Variable get(String name) {
-    this.printScope("");
     if (locals.containsKey(name)) {
       return locals.get(name);
     }
@@ -126,18 +125,18 @@ class Scope extends Printable {
 }
 
 class Variable extends Printable {
-  Variable(Expr expr) {
+  Variable(Object value) {
     // Assign to the expression value, not the expression tree. Otherwise:
     //   var bar = 1;
     //   var foo = bar + 1;
     //   bar = 2;
     //   assert foo == 2;
-    this.expr = expr;
-    this.children = Arrays.asList(expr);
+    this.value = value;
+    this.children = Arrays.asList();
   }
 
   // (alin) should this be final?
-  final Expr expr;
+  final Object value;
 }
 
 class VariableException extends RuntimeException {

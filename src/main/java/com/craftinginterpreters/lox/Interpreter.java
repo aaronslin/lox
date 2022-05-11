@@ -160,11 +160,21 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object evalLiteralExpr(Literal literal) {
-    if (literal.token.type == TokenType.IDENTIFIER) {
-      Variable variable = currentScope.get(literal.token.literal.toString());
-      return evaluate(variable.expr);
-    }
     return literal.token.literal;
+  }
+
+  @Override
+  public Object evalVarExpr(Var varName) {
+    Variable variable = currentScope.get(varName.name);
+    return variable.value;
+  }
+
+  @Override
+  public Object evalAssignExpr(Assign assign) {
+    // For now, this does the same thing as assignStmt (a declaration)
+    Variable value = new Variable(evaluate(assign.expr));
+    currentScope.set(assign.name, value);
+    return value;
   }
 
   @Override
@@ -181,7 +191,8 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void execAssignStmt(AssignStmt stmt) {
-    currentScope.set(stmt.name, stmt.variable);
+    Variable value = new Variable(evaluate(stmt.expr));
+    currentScope.set(stmt.name, value);
     return null;
   }
 

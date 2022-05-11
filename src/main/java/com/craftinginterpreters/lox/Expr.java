@@ -13,6 +13,8 @@ abstract class Expr extends Lexeme {
     public T evalUnaryExpr(Unary unary);
     public T evalGroupingExpr(Grouping grouping);
     public T evalLiteralExpr(Literal literal);
+    public T evalVarExpr(Var variable);
+    public T evalAssignExpr(Assign assign);
   };
 }
 
@@ -117,6 +119,46 @@ class Literal extends Expr {
   @Override
   public Object evaluateWith(Expr.Visitor<Object> visitor) {
     return visitor.evalLiteralExpr(this);
+  }
+}
+
+class Var extends Expr {
+  Var(String name) {
+    this.name = name;
+    this.children = Arrays.asList();
+  }
+
+  final String name;
+
+  @Override
+  public String toString() {
+    return "" + name;
+  }
+
+  @Override
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalVarExpr(this);
+  }
+}
+
+class Assign extends Expr {
+  Assign(String name, Expr expr) {
+    this.name = name;
+    this.expr = expr;
+    this.children = Arrays.asList(expr);
+  }
+
+  final String name;
+  final Expr expr;
+
+  @Override
+  public String toString() {
+    return "" + name + expr;
+  }
+
+  @Override
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalAssignExpr(this);
   }
 }
 
