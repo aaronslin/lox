@@ -187,12 +187,14 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void execBlockStmt(BlockStmt stmt) {
-    // todo: do something with new scope
     enterScope();
-    for (Statement substmt : stmt.statements) {
-      execute(substmt);
+    try {
+      for (Statement substmt : stmt.statements) {
+        execute(substmt);
+      }
+    } finally {
+      exitScope();
     }
-    exitScope();
     return null;
   }
 }
