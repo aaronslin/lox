@@ -81,20 +81,16 @@ class Unary extends Expr {
 }
 
 class Grouping extends Expr {
-  Grouping(Token left, Expr expr, Token right) {
-    this.left = left;
+  Grouping(Expr expr) {
     this.expr = expr;
-    this.right = right;
-    this.children = Arrays.asList(left, expr, right);
+    this.children = Arrays.asList(expr);
   }
 
-  final Token left;
   final Expr expr;
-  final Token right;
 
   @Override
   public String toString() {
-    return "" + left + expr + right;
+    return "" + expr;
   }
 
   @Override
@@ -104,16 +100,16 @@ class Grouping extends Expr {
 }
 
 class Literal extends Expr {
-  Literal(Token token) {
-    this.token = token;
-    this.children = Arrays.asList(token);
+  Literal(Object value) {
+    this.value = value;
+    this.children = Arrays.asList();
   }
 
-  final Token token;
+  final Object value;
 
   @Override
   public String toString() {
-    return "" + token;
+    return "" + value;
   }
 
   @Override
@@ -123,12 +119,12 @@ class Literal extends Expr {
 }
 
 class Var extends Expr {
-  Var(String name) {
+  Var(Token name) {
     this.name = name;
     this.children = Arrays.asList();
   }
 
-  final String name;
+  final Token name;
 
   @Override
   public String toString() {
@@ -142,13 +138,13 @@ class Var extends Expr {
 }
 
 class Assign extends Expr {
-  Assign(String name, Expr expr) {
+  Assign(Token name, Expr expr) {
     this.name = name;
     this.expr = expr;
     this.children = Arrays.asList(expr);
   }
 
-  final String name;
+  final Token name;
   final Expr expr;
 
   @Override

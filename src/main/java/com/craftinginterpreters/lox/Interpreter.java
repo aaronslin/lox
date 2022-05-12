@@ -1,5 +1,7 @@
 package com.craftinginterpreters.lox;
 
+import java.util.List;
+
 class Interpreter implements Expr.Visitor<Object>,
                              Statement.Visitor<Void> {
   Interpreter() {
@@ -7,6 +9,16 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   Scope currentScope;
+
+  void interpret(List<Statement> statements) {
+    try {
+      for (Statement statement : statements) {
+        execute(statement);
+      }
+    } catch (RuntimeError error) {
+      Lox.runtimeError(error);
+    }
+  }
 
   void enterScope() {
     Scope innerScope = new Scope(currentScope);
@@ -160,12 +172,12 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object evalLiteralExpr(Literal literal) {
-    return literal.token.literal;
+    return literal.value;
   }
 
   @Override
   public Object evalVarExpr(Var varName) {
-    Variable variable = currentScope.get(varName.name);
+    Variable variable = currentScope.get(varName.name.literal.toString());
     return variable.value;
   }
 
@@ -173,7 +185,7 @@ class Interpreter implements Expr.Visitor<Object>,
   public Object evalAssignExpr(Assign assign) {
     // For now, this does the same thing as assignStmt (a declaration)
     Variable value = new Variable(evaluate(assign.expr));
-    currentScope.set(assign.name, value);
+    currentScope.set(assign.name.literal.toString(), value);
     return value;
   }
 
@@ -190,9 +202,9 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   @Override
-  public Void execAssignStmt(AssignStmt stmt) {
+  public Void execVarStmt(VarStmt stmt) {
     Variable value = new Variable(evaluate(stmt.expr));
-    currentScope.set(stmt.name, value);
+    currentScope.set(stmt.name.literal.toString(), value);
     return null;
   }
 

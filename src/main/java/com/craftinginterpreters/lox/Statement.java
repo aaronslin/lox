@@ -11,7 +11,7 @@ abstract class Statement extends Printable {
   interface Visitor<T> {
     public T execExprStmt(ExprStmt stmt);
     public T execPrintStmt(PrintStmt stmt);
-    public T execAssignStmt(AssignStmt stmt);
+    public T execVarStmt(VarStmt stmt);
     public T execBlockStmt(BlockStmt stmt);
   }
 }
@@ -42,8 +42,8 @@ class PrintStmt extends Statement {
   }
 }
 
-class AssignStmt extends Statement {
-  AssignStmt(String name, Expr expr) {
+class VarStmt extends Statement {
+  VarStmt(Token name, Expr expr) {
     this.name = name;
     this.expr = expr;
     // (alin) commenting out scope for now -- not sure if this belongs to stmt
@@ -53,12 +53,12 @@ class AssignStmt extends Statement {
     this.children = Arrays.asList(expr);
   }
 
-  final String name;
+  final Token name;
   final Expr expr;
   // final Scope scope;
 
   public Void executeWith(Statement.Visitor<Void> visitor) {
-    return visitor.execAssignStmt(this);
+    return visitor.execVarStmt(this);
   }
 }
 

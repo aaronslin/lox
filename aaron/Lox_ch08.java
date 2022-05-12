@@ -6,14 +6,17 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class Lox {
-  private static final Interpreter interpreter = new Interpreter();
   static boolean hadError = false;
-  static boolean hadRuntimeError = false;
+  static Interpreter interpreter;
 
   public static void main(String[] args) throws IOException {
+    interpreter = new Interpreter();
+
     if (args.length > 1) {
       System.out.println("Usage: jlox [script]");
       System.exit(64); // [64]
@@ -29,7 +32,6 @@ public class Lox {
 
     // Indicate an error in the exit code.
     if (hadError) System.exit(65);
-    if (hadRuntimeError) System.exit(70);
   }
   private static void runPrompt() throws IOException {
     InputStreamReader input = new InputStreamReader(System.in);
@@ -46,14 +48,19 @@ public class Lox {
   private static void run(String source) {
     Scanner scanner = new Scanner(source);
     List<Token> tokens = scanner.scanTokens();
-    Parser parser = new Parser(tokens);
-    List<Statement> statements = parser.parse();
 
-    // Stop if there was a syntax error.
-    if (hadError) return;
-
-    interpreter.interpret(statements);
+    try {
+      Parser parser = new Parser(tokens);
+      List<Statement> statements = parser.parseProgram();
+      for (Statement stmt : statements) {
+        interpreter.execute(stmt);
+      }
+    } catch (Exception e) {
+      System.out.printf("%s%n", e.getMessage());
+      e.printStackTrace();
+    }
   }
+
   static void error(int line, String message) {
     report(line, "", message);
   }
@@ -63,17 +70,5 @@ public class Lox {
     System.err.println(
         "[line " + line + "] Error" + where + ": " + message);
     hadError = true;
-  }
-  static void error(Token token, String message) {
-    if (token.type == TokenType.EOF) {
-      report(token.line, " at end", message);
-    } else {
-      report(token.line, " at '" + token.lexeme + "'", message);
-    }
-  }
-  static void runtimeError(RuntimeError error) {
-    System.err.println(error.getMessage() +
-        "\n[line " + error.token.line + "]");
-    hadRuntimeError = true;
   }
 }
