@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 
 abstract class Printable {
-  public List<Printable> children;
+  public List<? extends Printable> _printables = Arrays.asList();
 
   public void printClass(String prefix, String text) {
     System.out.printf(prefix + this.getClass().getSimpleName() + ": " + text + "%n");
@@ -20,9 +20,9 @@ abstract class Printable {
     String parent_postfix = parentIsYoungest ? "└─" : "├─";
     printClass(prefix + parent_postfix, toString());
 
-    for (int i=0; i<children.size(); i++) {
+    for (int i=0; i<_printables.size(); i++) {
       String child_postfix  = parentIsYoungest ? "  " : "│ ";
-      children.get(i).print(prefix + child_postfix, (i==children.size()-1));
+      _printables.get(i).print(prefix + child_postfix, (i==_printables.size()-1));
     }
   }
 }
@@ -43,7 +43,7 @@ class Token extends Lexeme {
     this.lexeme = lexeme;
     this.literal = literal;
     this.line = line;
-    this.children = Arrays.asList();
+    this._printables = Arrays.asList();
   }
 
   public String fullString() {

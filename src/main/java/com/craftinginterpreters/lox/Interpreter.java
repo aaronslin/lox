@@ -20,20 +20,6 @@ class Interpreter implements Expr.Visitor<Object>,
     }
   }
 
-  void enterScope() {
-    Scope innerScope = new Scope(currentScope);
-    currentScope = innerScope;
-  }
-
-  void exitScope() {
-    Scope outerScope = currentScope.parent;
-    if (outerScope == null) {
-      throw new InterpreterException("Current scope is outermost and cannot be exited.");
-    }
-    // No cleanup needed -- outerScope variables should never reference inner scope vars
-    currentScope = outerScope;
-  }
-
   private Object evaluate(Expr expr) {
     return expr.evaluateWith(this);
   }
@@ -42,7 +28,7 @@ class Interpreter implements Expr.Visitor<Object>,
     stmt.executeWith(this);
   }
 
-  static double toNum(Object obj) {
+  static double toNum(Object obj) throws InterpreterCastException {
     if (obj == null) {
       return 0.0;
     } else if (obj instanceof Double) {
@@ -50,7 +36,7 @@ class Interpreter implements Expr.Visitor<Object>,
     } else if (obj instanceof Boolean) {
       return ((boolean) obj ? 1.0 : 0.0);
     } else {
-      throw new InterpreterCastException("Cannot cast to double.", obj);
+      throw new InterpreterCastException("double", obj);
     }
   }
 
@@ -61,12 +47,13 @@ class Interpreter implements Expr.Visitor<Object>,
       return ((double) obj) != 0;
     } else if (obj instanceof Boolean) {
       return (boolean) obj;
-    } else {
-      throw new InterpreterCastException("Cannot cast to boolean.", obj);
+    } else if (obj instanceof String) {
+      return !obj.equals("");
     }
+    return true;
   }
   
-  static Object _add(Object leftObj, Object rightObj) {
+  static Object _add(Object leftObj, Object rightObj) throws InterpreterCastException {
     if (leftObj instanceof String && rightObj instanceof String) {
       return (String) leftObj + (String) rightObj;
     } else {
@@ -115,27 +102,16 @@ class Interpreter implements Expr.Visitor<Object>,
         case LESS: 
           return toNum(leftVal) < toNum(rightVal);
 
-        // Supported: (bool, bool)
-        case AND:
-          return toBool(leftVal) && toBool(rightVal);
-        case OR: 
-          return toBool(leftVal) || toBool(rightVal);
-
         // Supported: everything. Note that 1!=true
         case BANG_EQUAL: 
           return !_equals(leftVal, rightVal);
         case EQUAL_EQUAL: 
           return _equals(leftVal, rightVal);
         default:
-          throw new InterpreterException(String.format("Operator %s is not supported.", binary.operator.type));
+          throw new RuntimeError(binary.operator, "Binary operator is not supported.");
       }
     } catch (InterpreterCastException e) {
-      throw new InterpreterException(String.format(
-        "Binary operator %s cannot be applied to expression %s of type %s.", 
-        binary.operator.lexeme, 
-        e.obj,
-        e.obj.getClass().getName()
-      ));
+      throw new RuntimeError(binary.operator, e.getMessage());
     }
   }
 
@@ -148,20 +124,10 @@ class Interpreter implements Expr.Visitor<Object>,
       } else if (unary.operator.type == TokenType.MINUS) {
         return -toNum(exprValue);
       } else {
-        throw new InterpreterException(String.format(
-          "Unary operator %s not supported for expression %s of type %s.",
-          unary.operator.lexeme,
-          exprValue,
-          exprValue.getClass().getName()
-        ));
+        throw new RuntimeError(unary.operator, "Unary operator is not supported.");
       }
     } catch (InterpreterCastException e) {
-      throw new InterpreterException(String.format(
-        "Unary operator %s cannot be applied to expression %s of type %s.", 
-        unary.operator.lexeme, 
-        e.obj,
-        e.obj.getClass().getName()
-      ));
+      throw new RuntimeError(unary.operator, e.getMessage());
     }
   }
 
@@ -176,17 +142,29 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   @Override
+  public Object evalLogicalExpr(Logical logical) {
+    Object leftVal = evaluate(logical.left);
+    if (logical.operator.type == TokenType.AND) {
+      if (!toBool(leftVal)) return leftVal;
+    } else if (logical.operator.type == TokenType.OR) {
+      if (toBool(leftVal)) return leftVal;
+    } else {
+      throw new RuntimeError(logical.operator, "Logical operator is not supported.");
+    }
+    return evaluate(logical.right);
+  }
+
+  @Override
   public Object evalVarExpr(Var varName) {
-    Variable variable = currentScope.get(varName.name.literal.toString());
+    Variable variable = currentScope.get(varName.name);
     return variable.value;
   }
 
   @Override
   public Object evalAssignExpr(Assign assign) {
-    // For now, this does the same thing as assignStmt (a declaration)
     Variable value = new Variable(evaluate(assign.expr));
-    currentScope.set(assign.name.literal.toString(), value);
-    return value;
+    currentScope.assign(assign.name, value);
+    return value.value;
   }
 
   @Override
@@ -204,45 +182,71 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Void execVarStmt(VarStmt stmt) {
     Variable value = new Variable(evaluate(stmt.expr));
-    currentScope.set(stmt.name.literal.toString(), value);
+    currentScope.declare(stmt.name, value);
     return null;
   }
 
   @Override
   public Void execBlockStmt(BlockStmt stmt) {
-    enterScope();
+    Scope outerScope = currentScope;
+    currentScope = new Scope(currentScope);
     try {
       for (Statement substmt : stmt.statements) {
         execute(substmt);
       }
     } finally {
-      exitScope();
+      currentScope = outerScope;
     }
+    return null;
+  }
+
+  @Override
+  public Void execIfStmt(IfStmt stmt) {
+    if (toBool(evaluate(stmt.condition))) {
+      execute(stmt.then);
+    } else {
+      execute(stmt.otherwise);
+    }
+    return null;
+  }
+
+  @Override
+  public Void execWhileStmt(WhileStmt stmt) {
+    while (toBool(evaluate(stmt.condition))) {
+      execute(stmt.body);
+    }
+    return null;
+  }
+
+  @Override
+  public Void execForStmt(ForStmt stmt) {
+    Scope outerScope = currentScope;
+    currentScope = new Scope(currentScope);
+    
+    try {
+      execute(stmt.initializer);
+      while (toBool(evaluate(stmt.condition))) {
+        if (stmt.body instanceof BlockStmt) {
+          BlockStmt body = (BlockStmt) stmt.body;
+          for (Statement substmt : body.statements) { 
+            execute(substmt);
+          }
+        } else {
+          execute(stmt.body);
+        }
+        execute(stmt.iterator);
+      }
+    } finally {
+      currentScope = outerScope;
+    }
+
     return null;
   }
 }
 
-class InterpreterCastException extends RuntimeException {
-  Object obj;
-
-  public InterpreterCastException(String message, Object obj) {
-    super(message);
-    this.obj = obj;
-  }
-}
-
-class InterpreterException extends RuntimeException {
-  String code;
-  int column;
-
-  public InterpreterException(String message, String code, int column) {
-    super(message);
-    this.code = code;
-    this.column = column;
-  }
-
-  public InterpreterException(String message) {
-    this(message, "", -1);
+class InterpreterCastException extends Exception {
+  public InterpreterCastException(String javaType, Object obj) {
+    super(String.format("Cannot cast %s (type: %s) to %s.", obj, obj.getClass().getName(), javaType));
   }
 }
 

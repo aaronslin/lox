@@ -27,7 +27,7 @@ class Parser {
   }
   private Statement declaration() {
     try {
-      if (match(VAR)) return varDeclaration();
+      if (check(VAR)) return varDeclaration();
 
       return statement();
     } catch (ParseError error) {
@@ -38,6 +38,9 @@ class Parser {
   private Statement statement() {
     if (match(PRINT)) return printStatement();
     if (match(LEFT_BRACE)) return new BlockStmt(block());
+    if (match(IF)) return conditional();
+    if (match(WHILE)) return whileLoop();
+    if (match(FOR)) return forLoop();
 
     return expressionStatement();
   }
@@ -47,6 +50,7 @@ class Parser {
     return new PrintStmt(value);
   }
   private Statement varDeclaration() {
+    Token varToken = consume(VAR, "Expect keyword 'var'.");
     Token name = consume(IDENTIFIER, "Expect variable name.");
 
     Expr initializer = null;
@@ -72,8 +76,33 @@ class Parser {
     consume(RIGHT_BRACE, "Expect '}' after block.");
     return statements;
   }
+  private Statement forLoop() {
+    consume(LEFT_PAREN, "Expect '(' after 'for'.");
+    Statement initializer = varDeclaration();
+    Expr condition = expression();
+    consume(SEMICOLON, "Expect ';' after 'for' condition.");
+    Expr iterator = assignment();
+    consume(RIGHT_PAREN, "Expect ')' after 'for'.");
+    Statement body = statement();
+    return new ForStmt(initializer, condition, new ExprStmt(iterator), body);
+  }
+  private Statement whileLoop() {
+    Expr condition = primary();
+    Statement statement = statement();
+    return new WhileStmt(condition, statement);
+  }
+  private Statement conditional() {
+    Expr condition = primary();
+    Statement then = statement();
+    Statement otherwise = new BlockStmt(new ArrayList<>());
+    
+    if (match(ELSE)) {
+      otherwise = statement();
+    }
+    return new IfStmt(condition, then, otherwise);
+  }
   private Expr assignment() {
-    Expr expr = equality();
+    Expr expr = or();
 
     if (match(EQUAL)) {
       Token equals = previous();
@@ -85,6 +114,29 @@ class Parser {
       }
 
       error(equals, "Invalid assignment target."); // [no-throw]
+    }
+
+    return expr;
+  }
+  private Expr or() {
+    Expr expr = and();
+
+    if (match(OR)) {
+      Token operator = previous();
+      Expr right = and();
+      expr = new Logical(expr, operator, right);
+    }
+
+    return expr;
+    
+  }
+  private Expr and() {
+    Expr expr = equality();
+
+    if (match(AND)) {
+      Token operator = previous();
+      Expr right = equality();
+      expr = new Logical(expr, operator, right);
     }
 
     return expr;

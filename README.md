@@ -100,3 +100,12 @@ The really cool thing is that this grammar can be unpacked very nicely into pars
     print a;
   }
 ```
+
+### Ch. 9:
+
+- For loops would be more elegant to parse if it were instead `for(var i=0; i=i+1; i<10)`
+- Dangling else problem
+- forgot to short circuit `and` and `or`. Apparently their parser didn't parse it yet
+- `and` has higher priority than `or`. Why? Probably because `and` ~ * and `or` ~ +
+- Most surprisingly, `and` and `or` are not binary operators because they control logic flow too.
+- Their for loop doesn't require the initializer to be a `varDecl`. In fact, their for loop parses to a WhileLoop. Clever

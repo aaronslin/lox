@@ -8,19 +8,20 @@ abstract class Expr extends Lexeme {
 
   interface Visitor<T> { 
     // not sure why these methods need to be defined
-    public T evalEmptyExpr(Empty empty);
+    public T evalAssignExpr(Assign assign);
     public T evalBinaryExpr(Binary binary);
-    public T evalUnaryExpr(Unary unary);
+    public T evalEmptyExpr(Empty empty);
     public T evalGroupingExpr(Grouping grouping);
     public T evalLiteralExpr(Literal literal);
+    public T evalLogicalExpr(Logical literal);
+    public T evalUnaryExpr(Unary unary);
     public T evalVarExpr(Var variable);
-    public T evalAssignExpr(Assign assign);
   };
 }
 
 class Empty extends Expr {
   Empty() {
-    this.children = Arrays.asList();
+    this._printables = Arrays.asList();
   }
 
   @Override
@@ -41,7 +42,7 @@ class Binary extends Expr {
     this.left = left;
     this.operator = operator;
     this.right = right;
-    this.children = Arrays.asList(left, operator, right);
+    this._printables = Arrays.asList(left, operator, right);
   }
 
   final Expr left;
@@ -59,11 +60,34 @@ class Binary extends Expr {
   }
 }
 
+class Logical extends Expr {
+  Logical(Expr left, Token operator, Expr right) {
+    this.left = left;
+    this.operator = operator;
+    this.right = right;
+    this._printables = Arrays.asList(left, operator, right);
+  }
+
+  final Expr left;
+  final Token operator;
+  final Expr right;
+
+  @Override
+  public String toString() {
+    return "" + left + operator + right;
+  }
+
+  @Override
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalLogicalExpr(this);
+  }
+}
+
 class Unary extends Expr {
   Unary(Token operator, Expr expr) {
     this.operator = operator;
     this.expr = expr;
-    this.children = Arrays.asList(operator, expr);
+    this._printables = Arrays.asList(operator, expr);
   }
 
   final Token operator;
@@ -83,7 +107,7 @@ class Unary extends Expr {
 class Grouping extends Expr {
   Grouping(Expr expr) {
     this.expr = expr;
-    this.children = Arrays.asList(expr);
+    this._printables = Arrays.asList(expr);
   }
 
   final Expr expr;
@@ -102,7 +126,7 @@ class Grouping extends Expr {
 class Literal extends Expr {
   Literal(Object value) {
     this.value = value;
-    this.children = Arrays.asList();
+    this._printables = Arrays.asList();
   }
 
   final Object value;
@@ -121,7 +145,7 @@ class Literal extends Expr {
 class Var extends Expr {
   Var(Token name) {
     this.name = name;
-    this.children = Arrays.asList();
+    this._printables = Arrays.asList();
   }
 
   final Token name;
@@ -141,7 +165,7 @@ class Assign extends Expr {
   Assign(Token name, Expr expr) {
     this.name = name;
     this.expr = expr;
-    this.children = Arrays.asList(expr);
+    this._printables = Arrays.asList(expr);
   }
 
   final Token name;
