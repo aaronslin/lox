@@ -1,18 +1,24 @@
 package com.craftinginterpreters.lox;
 
+import java.util.ArrayList;
 import java.util.List;
 
 class Interpreter implements Expr.Visitor<Object>,
                              Statement.Visitor<Void> {
   Interpreter() {
     this.currentScope = new Scope(null);
+    this.recursionDepth = 0;
   }
 
+  final static int MAX_RECURSION_DEPTH = 10;
+
   Scope currentScope;
+  int recursionDepth;
 
   void interpret(List<Statement> statements) {
     try {
       for (Statement statement : statements) {
+        statement.print();
         execute(statement);
       }
     } catch (RuntimeError error) {
@@ -167,6 +173,73 @@ class Interpreter implements Expr.Visitor<Object>,
     return value.value;
   }
 
+  // (alin) reason about this in the inefficient fibonacci case, where you could have branching recursion
+  // (alin) reason about this in the even/odd recursion case
+  // (alin) does f(g)(x,y) work?
+  @Override
+  public Object evalFuncExpr(Func func) {
+    // Check that func points to a funcStmt
+    Object result = evaluate(func.callee);
+    FuncStmt funcStmt;
+    if (!(result instanceof FuncStmt)) {
+      throw new RuntimeError(func.identifier, "Expression is not callable.");
+    } else {
+      funcStmt = (FuncStmt) result;
+    }
+
+    // Evaluate arguments in outer scope
+    if (func.parameters.size() != funcStmt.parameters.size()) {
+      throw new RuntimeError(func.identifier, "Wrong number of arguments given.");
+    }
+    List<Object> args = evalSeries(func.parameters);
+
+    // Check recursion depth
+    if (recursionDepth > MAX_RECURSION_DEPTH) {
+      throw new RuntimeError(func.identifier, String.format("Maximum recursion depth reached: %s", MAX_RECURSION_DEPTH));
+    }
+
+    // Initialize scope and increment recursionDepth -- these must be reset before returning/throwing!
+    recursionDepth++;
+    Scope outerScope = currentScope;
+    currentScope = new Scope(currentScope);
+    try {
+      // Initialize function parameters
+      for (int i=0; i<args.size(); i++) {
+        currentScope.declare(
+          funcStmt.parameters.get(i).name, 
+          new Variable(args.get(i))
+        );
+      }
+
+      // Execute function body
+      for (Statement stmt : funcStmt.body.statements) {
+        // Should there be any special exception handling here?
+        execute(stmt);
+      }
+    } catch (ReturnException e) {
+      return e.value;
+    } finally {
+      currentScope = outerScope;
+      recursionDepth--;
+    }
+
+    return null;
+  }
+
+  public <T extends Expr> List<Object> evalSeries(Series<T> series) {
+    List<Object> values = new ArrayList<>();
+    for (T item : series.members) { 
+      values.add(evaluate(item));
+    }
+    return values;
+  }
+
+  /*
+   o-----------------o
+   | EXECUTE METHODS |
+   o-----------------o
+  */
+
   @Override
   public Void execExprStmt(ExprStmt stmt) {
     evaluate(stmt.expr);
@@ -242,6 +315,25 @@ class Interpreter implements Expr.Visitor<Object>,
 
     return null;
   }
+
+  @Override
+  public Void execFuncStmt(FuncStmt stmt) {
+    currentScope.declare(stmt.name.name, new Variable(stmt));
+    return null;
+  }
+
+  @Override
+  public Void execReturnStmt(ReturnStmt stmt) {
+    throw new ReturnException(evaluate(stmt.expr));
+  }
+}
+
+class ReturnException extends RuntimeException {
+  public ReturnException(Object value) {
+    this.value = value;
+  }
+
+  Object value;
 }
 
 class InterpreterCastException extends Exception {

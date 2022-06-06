@@ -12,8 +12,10 @@ abstract class Statement extends Printable {
     public T execBlockStmt(BlockStmt stmt);
     public T execExprStmt(ExprStmt stmt);
     public T execForStmt(ForStmt stmt);
+    public T execFuncStmt(FuncStmt stmt);
     public T execIfStmt(IfStmt stmt);
     public T execPrintStmt(PrintStmt stmt);
+    public T execReturnStmt(ReturnStmt stmt);
     public T execVarStmt(VarStmt stmt);
     public T execWhileStmt(WhileStmt stmt);
   }
@@ -129,6 +131,36 @@ class IfStmt extends Statement {
   }
 }
 
+class FuncStmt extends Statement {
+  FuncStmt(Var name, Series<Var> parameters, BlockStmt body) {
+    this.name = name;
+    this.parameters = parameters;
+    this.body = body;
+    this._printables = Arrays.asList(name, parameters, body);
+  }
+
+  final Var name;
+  final Series<Var> parameters;
+  final BlockStmt body;
+
+  public Void executeWith(Statement.Visitor<Void> visitor) {
+    return visitor.execFuncStmt(this);
+  }
+}
+
+class ReturnStmt extends Statement {
+  ReturnStmt(Expr expr) {
+    this.expr = expr;
+    this._printables = Arrays.asList(expr);
+  }
+
+  final Expr expr;
+
+  public Void executeWith(Statement.Visitor<Void> visitor) {
+    return visitor.execReturnStmt(this);
+  }
+}
+
 
 // (alin) should eventually handle reference counting for the closure case
 class Scope extends Printable {
@@ -199,6 +231,9 @@ class Scope extends Printable {
   }
 }
 
+// This Variable class is useful if:
+// 1. I want to do reference counting for GC
+// 2. I want to distinguish empty initializer from nil;
 class Variable extends Printable {
   Variable(Object value) {
     // Assign to the expression value, not the expression tree. Otherwise:

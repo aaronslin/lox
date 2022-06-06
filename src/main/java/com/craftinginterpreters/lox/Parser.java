@@ -22,18 +22,63 @@ class Parser {
 
     return statements; // [parse-error-handling]
   }
-  private Expr expression() {
-    return assignment();
+  private Statement returns() {
+    try {
+      if (match(RETURN)) {
+        Expr expr = expression();
+        consume(SEMICOLON, "Expect ';' after return statement.");
+        return new ReturnStmt(expr);
+      }
+    } catch (ParseError error) {
+      // not sure if there is a way to write this without repeating this catch block
+      synchronize();
+      return null;
+    }
+    return declaration();
   }
   private Statement declaration() {
     try {
       if (check(VAR)) return varDeclaration();
+      if (match(FUN)) return funcDeclaration();
 
       return statement();
     } catch (ParseError error) {
       synchronize();
       return null;
     }
+  }
+  private Statement varDeclaration() {
+    Token varToken = consume(VAR, "Expect keyword 'var'.");
+    Token name = consume(IDENTIFIER, "Expect variable name.");
+
+    Expr initializer = null;
+    if (match(EQUAL)) {
+      initializer = expression();
+    }
+
+    consume(SEMICOLON, "Expect ';' after variable declaration.");
+    return new VarStmt(name, initializer);
+  }
+  private Statement funcDeclaration() {
+    List<Statement> statements = new ArrayList<>();
+
+    Token identifier = consume(IDENTIFIER, "Expect function name.");
+    consume(LEFT_PAREN, "Expect '(' after function name.");
+    _GetExpression getParameter = () -> parameter();
+    Series<Var> parameters = series(RIGHT_PAREN, getParameter);
+    consume(LEFT_BRACE, "Expect '{' after function header.");
+    while (!check(RIGHT_BRACE) && !isAtEnd()) {
+      statements.add(returns());
+    }
+    consume(RIGHT_BRACE, "Expect '}' after function body.");
+
+    return new FuncStmt(new Var(identifier), parameters, new BlockStmt(statements));
+  }
+  private Var parameter() {
+    if (match(IDENTIFIER)) {
+      return new Var(previous());
+    }
+    throw error(peek(), "Expect identifier.");
   }
   private Statement statement() {
     if (match(PRINT)) return printStatement();
@@ -49,18 +94,6 @@ class Parser {
     consume(SEMICOLON, "Expect ';' after value.");
     return new PrintStmt(value);
   }
-  private Statement varDeclaration() {
-    Token varToken = consume(VAR, "Expect keyword 'var'.");
-    Token name = consume(IDENTIFIER, "Expect variable name.");
-
-    Expr initializer = null;
-    if (match(EQUAL)) {
-      initializer = expression();
-    }
-
-    consume(SEMICOLON, "Expect ';' after variable declaration.");
-    return new VarStmt(name, initializer);
-  }
   private Statement expressionStatement() {
     Expr expr = expression();
     consume(SEMICOLON, "Expect ';' after expression.");
@@ -73,7 +106,7 @@ class Parser {
       statements.add(declaration());
     }
 
-    consume(RIGHT_BRACE, "Expect '}' after block.");
+    consume(RIGHT_BRACE, "Expect '}' after blocYk.");
     return statements;
   }
   private Statement forLoop() {
@@ -100,6 +133,9 @@ class Parser {
       otherwise = statement();
     }
     return new IfStmt(condition, then, otherwise);
+  }
+  private Expr expression() {
+    return assignment();
   }
   private Expr assignment() {
     Expr expr = or();
@@ -203,17 +239,39 @@ class Parser {
       return new Literal(previous().literal);
     }
 
-    if (match(IDENTIFIER)) {
-      return new Var(previous());
-    }
-
     if (match(LEFT_PAREN)) {
       Expr expr = expression();
       consume(RIGHT_PAREN, "Expect ')' after expression.");
       return new Grouping(expr);
     }
 
-    throw error(peek(), "Expect expression.");
+    return callable();
+  }
+  private Expr callable() {
+    if (match(IDENTIFIER)) {
+      Token identifier = previous();
+      Expr expr = new Var(identifier);
+
+      while (match(LEFT_PAREN)) 
+        expr = new Func(identifier, expr, series(RIGHT_PAREN, (_GetExpression)() -> expression()));
+      return expr;
+    }
+
+    // Better: Throw an error, then catch and rethrow at expression() and funcDecl()
+    // with different error messages.
+    throw error(peek(), "Expect identifier.");
+  }
+
+  private <T extends Expr> Series<T> series(TokenType closingType, _GetExpression<T> getExpression) {
+    List<T> args = new ArrayList<>();
+    if (!check(closingType)) {
+      args.add(getExpression.call());
+      while (match(TokenType.COMMA)) {
+        args.add(getExpression.call());
+      }
+    }
+    consume(closingType, String.format("Expect %s.", closingType));
+    return new Series<T>(args);
   }
   private boolean match(TokenType... types) {
     for (TokenType type : types) {
@@ -275,3 +333,44 @@ class Parser {
     }
   }
 }
+
+interface _GetExpression<T extends Expr> {
+  T call();
+}
+
+/* 
+Order of operations:
+
+  statement
+  -> varDecl
+   | funcDecl
+   | statement;
+
+  statement 
+   -> print
+   | block
+   | while
+   | for
+   | if
+   | expression;
+    
+  expression
+   -> assignment
+   | logical
+   | equality 
+   | comparison
+   | addsub
+   | multdiv
+   | unary
+   | primary;
+
+  primary
+   -> nil false true
+   | number
+   | ???
+   | grouping;
+
+  ???
+   -> funcCall
+   | identifier;
+*/

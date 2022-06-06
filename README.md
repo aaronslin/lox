@@ -109,3 +109,44 @@ The really cool thing is that this grammar can be unpacked very nicely into pars
 - `and` has higher priority than `or`. Why? Probably because `and` ~ * and `or` ~ +
 - Most surprisingly, `and` and `or` are not binary operators because they control logic flow too.
 - Their for loop doesn't require the initializer to be a `varDecl`. In fact, their for loop parses to a WhileLoop. Clever
+
+### Ch. 10:
+
+- I was originally trying to do something like:
+
+```
+private <T> Series<T> series(_GetExpression<T> closure) { }
+private Expr expression() { }
+private interface _GetExpression<T> {
+  T call();
+}
+series(() -> expression()); // cannot infer type-variables T
+```
+
+The reason this doesn't work is because the type inference system doesn't look inside of the lambda body to infer the type of T,
+otherwise there is a risk of running into a loop. Consider the example below.
+(https://stackoverflow.com/questions/31227149/why-is-this-type-inference-not-working-with-this-lambda-expression-scenario)
+
+```
+<T> T foo();
+<T> void bar(FunctionalT t);
+interface FunctionalT<T> {
+  T call();
+}
+
+bar(() -> foo());
+```
+
+ - The book has precedence primary, callable, unary while mine is callable, primary, unary. I don't think this makes 
+   a difference in this case because their match conditions are different, but maybe it makes sense to leave identifier as is in primary().
+ - maximum arguments of 255
+ - error vs. throwing
+ - LoxCallable wraps a FuncStmt. The interface implements a call method, which will be reused later
+ - executeBlock() is helpful
+ - Every function must return something, even if it doesn't have a return. My implementation accidentally does this.
+ - Looks like `return` outside of a function is not considered a parse error to them.
+ - LOL at the return exception -- I did that as a hack but apparently that's the book's implementation choice too! 
+    `super(null, null, false false)` to disable some exception machinery
+
+ - to support local functions / closures, I think I'll have to first refactor the environments to be statically scoped instead of dynamically.
+   implementation: Add a `closure` environment to each LoxCallable

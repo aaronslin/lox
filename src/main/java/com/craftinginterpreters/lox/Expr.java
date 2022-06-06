@@ -7,13 +7,13 @@ abstract class Expr extends Lexeme {
   abstract public Object evaluateWith(Visitor<Object> visitor);
 
   interface Visitor<T> { 
-    // not sure why these methods need to be defined
     public T evalAssignExpr(Assign assign);
     public T evalBinaryExpr(Binary binary);
     public T evalEmptyExpr(Empty empty);
+    public T evalFuncExpr(Func func);
     public T evalGroupingExpr(Grouping grouping);
     public T evalLiteralExpr(Literal literal);
-    public T evalLogicalExpr(Logical literal);
+    public T evalLogicalExpr(Logical logical);
     public T evalUnaryExpr(Unary unary);
     public T evalVarExpr(Var variable);
   };
@@ -173,7 +173,7 @@ class Assign extends Expr {
 
   @Override
   public String toString() {
-    return "" + name + expr;
+    return "" + name + "=" +expr;
   }
 
   @Override
@@ -182,6 +182,51 @@ class Assign extends Expr {
   }
 }
 
+class Func extends Expr {
+  Func(Token identifier, Expr callee, Series parameters) {
+    this.identifier = identifier;
+    this.callee = callee;
+    this.parameters = parameters;
+    this._printables = Arrays.asList(callee, parameters);
+  }
+
+  final Token identifier;
+  final Expr callee;
+  final Series parameters;
+
+  @Override
+  public String toString() {
+    return "" + callee + "(" + parameters + ")";
+  }
+
+  @Override
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalFuncExpr(this);
+  }
+}
+
+
+class Series<T extends Expr> extends Lexeme {
+  Series(List<T> members) {
+    this.members = members;
+    this._printables = members;
+  }
+
+  final List<T> members;
+
+  public T get(int index) {
+    return members.get(index);
+  }
+
+  public int size() {
+    return members.size();
+  }
+
+  @Override
+  public String toString() {
+    return "" + members;
+  }
+}
 /*
 Goal: For numerical/boolean expressions, return all satisfying trees
 
