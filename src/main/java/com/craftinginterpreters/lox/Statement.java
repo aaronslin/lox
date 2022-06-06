@@ -149,11 +149,13 @@ class FuncStmt extends Statement {
 }
 
 class ReturnStmt extends Statement {
-  ReturnStmt(Expr expr) {
+  ReturnStmt(Token token, Expr expr) {
+    this.token = token;
     this.expr = expr;
     this._printables = Arrays.asList(expr);
   }
 
+  final Token token;
   final Expr expr;
 
   public Void executeWith(Statement.Visitor<Void> visitor) {

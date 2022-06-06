@@ -22,20 +22,6 @@ class Parser {
 
     return statements; // [parse-error-handling]
   }
-  private Statement returns() {
-    try {
-      if (match(RETURN)) {
-        Expr expr = expression();
-        consume(SEMICOLON, "Expect ';' after return statement.");
-        return new ReturnStmt(expr);
-      }
-    } catch (ParseError error) {
-      // not sure if there is a way to write this without repeating this catch block
-      synchronize();
-      return null;
-    }
-    return declaration();
-  }
   private Statement declaration() {
     try {
       if (check(VAR)) return varDeclaration();
@@ -68,7 +54,7 @@ class Parser {
     Series<Var> parameters = series(RIGHT_PAREN, getParameter);
     consume(LEFT_BRACE, "Expect '{' after function header.");
     while (!check(RIGHT_BRACE) && !isAtEnd()) {
-      statements.add(returns());
+      statements.add(declaration());
     }
     consume(RIGHT_BRACE, "Expect '}' after function body.");
 
@@ -81,6 +67,7 @@ class Parser {
     throw error(peek(), "Expect identifier.");
   }
   private Statement statement() {
+    if (check(RETURN)) return returnStatement();
     if (match(PRINT)) return printStatement();
     if (match(LEFT_BRACE)) return new BlockStmt(block());
     if (match(IF)) return conditional();
@@ -88,6 +75,12 @@ class Parser {
     if (match(FOR)) return forLoop();
 
     return expressionStatement();
+  }
+  private Statement returnStatement() {
+    Token token = consume(RETURN, "Expect 'return' keyword.");
+    Expr expr = expression();
+    consume(SEMICOLON, "Expect ';' after return statement.");
+    return new ReturnStmt(token, expr);
   }
   private Statement printStatement() {
     Expr value = expression();

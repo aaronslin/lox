@@ -10,7 +10,7 @@ class Interpreter implements Expr.Visitor<Object>,
     this.recursionDepth = 0;
   }
 
-  final static int MAX_RECURSION_DEPTH = 10;
+  final static int MAX_RECURSION_DEPTH = 50;
 
   Scope currentScope;
   int recursionDepth;
@@ -324,6 +324,9 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void execReturnStmt(ReturnStmt stmt) {
+    if (currentScope.parent == null) {
+      throw new RuntimeError(stmt.token, "Cannot return out of global scope.");
+    }
     throw new ReturnException(evaluate(stmt.expr));
   }
 }
