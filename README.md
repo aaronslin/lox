@@ -150,3 +150,10 @@ bar(() -> foo());
 
  - to support local functions / closures, I think I'll have to first refactor the environments to be statically scoped instead of dynamically.
    implementation: Add a `closure` environment to each LoxCallable
+
+ Main differences:
+  - static (book implementation) vs. dynamic scope (my implementation)
+  - book contains a native function `clock()`
+  - book implementation of `LoxCallable` extends to classes, with an `arity()` and `call()` method.
+  - my implementation throws a RuntimeError when executing `return` in global scope.
+  - my implementation lacks a maximum argument length

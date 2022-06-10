@@ -1,0 +1,19 @@
+print("This should raise VariableNotFound:");
+var a = 1;
+fun f() {
+  print(a);
+  print(b);
+}
+var b = 2;
+f();
+print("----------");
+
+
+print("This should print 2:");
+var c=1;
+fun g() {
+  print(c);
+}
+c = c+1;
+g();
+print("----------");

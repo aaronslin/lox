@@ -172,6 +172,12 @@ class Scope extends Printable {
     this._printables = Arrays.asList();
   }
 
+  private Scope(Scope parent, Map<String, Variable> locals) {
+    this.parent = parent;
+    this.locals = locals;
+    this._printables = Arrays.asList();
+  }
+
   final Scope parent;
   final Map<String, Variable> locals;
 
@@ -201,6 +207,10 @@ class Scope extends Printable {
     } else {
       parent.assign(token, variable);
     }
+  }
+
+  public Scope createCopy() {
+    return new Scope(parent, new HashMap<>(locals));
   }
 
   public Scope getGlobal() {

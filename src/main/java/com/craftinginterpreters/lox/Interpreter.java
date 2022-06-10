@@ -18,7 +18,6 @@ class Interpreter implements Expr.Visitor<Object>,
   void interpret(List<Statement> statements) {
     try {
       for (Statement statement : statements) {
-        statement.print();
         execute(statement);
       }
     } catch (RuntimeError error) {
@@ -173,57 +172,40 @@ class Interpreter implements Expr.Visitor<Object>,
     return value.value;
   }
 
-  // (alin) reason about this in the inefficient fibonacci case, where you could have branching recursion
-  // (alin) reason about this in the even/odd recursion case
-  // (alin) does f(g)(x,y) work?
   @Override
   public Object evalFuncExpr(Func func) {
-    // Check that func points to a funcStmt
+    // Check that func variable points to a valid LoxFunction;
+    // This may eventually need to be refactored to a evalCallable.
+    // Callable is a parser concept, while Function is an interpreter concept.
     Object result = evaluate(func.callee);
-    FuncStmt funcStmt;
-    if (!(result instanceof FuncStmt)) {
+    if (!(result instanceof LoxCallable)) {
       throw new RuntimeError(func.identifier, "Expression is not callable.");
-    } else {
-      funcStmt = (FuncStmt) result;
     }
 
+    LoxFunction loxFunction = (LoxFunction) result;
+  
     // Evaluate arguments in outer scope
-    if (func.parameters.size() != funcStmt.parameters.size()) {
-      throw new RuntimeError(func.identifier, "Wrong number of arguments given.");
+    if (func.parameters.size() != loxFunction.arity()) {
+      throw new RuntimeError(func.identifier, String.format("Expected %s arguments, but got %s.", loxFunction.arity(), func.parameters.size()));
     }
     List<Object> args = evalSeries(func.parameters);
 
+    // (alin) should this evaluate args first or check recursion depth?
     // Check recursion depth
     if (recursionDepth > MAX_RECURSION_DEPTH) {
       throw new RuntimeError(func.identifier, String.format("Maximum recursion depth reached: %s", MAX_RECURSION_DEPTH));
     }
 
-    // Initialize scope and increment recursionDepth -- these must be reset before returning/throwing!
-    recursionDepth++;
+    // Call the function.
     Scope outerScope = currentScope;
-    currentScope = new Scope(currentScope);
     try {
-      // Initialize function parameters
-      for (int i=0; i<args.size(); i++) {
-        currentScope.declare(
-          funcStmt.parameters.get(i).name, 
-          new Variable(args.get(i))
-        );
-      }
-
-      // Execute function body
-      for (Statement stmt : funcStmt.body.statements) {
-        // Should there be any special exception handling here?
-        execute(stmt);
-      }
-    } catch (ReturnException e) {
-      return e.value;
+      recursionDepth++;
+      return loxFunction.call(this, args);
     } finally {
-      currentScope = outerScope;
       recursionDepth--;
+      // (alin) please check. 
+      currentScope = outerScope;
     }
-
-    return null;
   }
 
   public <T extends Expr> List<Object> evalSeries(Series<T> series) {
@@ -316,9 +298,11 @@ class Interpreter implements Expr.Visitor<Object>,
     return null;
   }
 
+  // execute a function declaration
   @Override
   public Void execFuncStmt(FuncStmt stmt) {
-    currentScope.declare(stmt.name.name, new Variable(stmt));
+    LoxFunction func = new LoxFunction(stmt, currentScope);
+    currentScope.declare(stmt.name.name, new Variable(func));
     return null;
   }
 
