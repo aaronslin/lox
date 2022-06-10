@@ -5,6 +5,14 @@ import java.util.List;
 interface LoxCallable {
   int arity();
   Object call(Interpreter interpreter, List<Object> arguments);
+
+  default boolean isValidArity(int numArgs) {
+    return arity() == numArgs;
+  }
+
+  default String arityString() {
+    return "" + arity();
+  }
 }
 
 class LoxFunction implements LoxCallable {
@@ -52,6 +60,3 @@ class LoxFunction implements LoxCallable {
     return "<function " + name + ">";
   }
 }
-
-// (alin) left off here: Just got the ch10 test cases to pass. Static scoping should work now.
-// Need to define an `assert` and `assertRaises` FFI.

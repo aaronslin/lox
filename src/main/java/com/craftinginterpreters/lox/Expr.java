@@ -183,20 +183,20 @@ class Assign extends Expr {
 }
 
 class Func extends Expr {
-  Func(Token identifier, Expr callee, Series parameters) {
+  Func(Token identifier, Expr callee, Series arguments) {
     this.identifier = identifier;
     this.callee = callee;
-    this.parameters = parameters;
-    this._printables = Arrays.asList(callee, parameters);
+    this.arguments = arguments;
+    this._printables = Arrays.asList(callee, arguments);
   }
 
   final Token identifier;
   final Expr callee;
-  final Series parameters;
+  final Series arguments;
 
   @Override
   public String toString() {
-    return "" + callee + "(" + parameters + ")";
+    return "" + callee + "(" + arguments + ")";
   }
 
   @Override

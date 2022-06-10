@@ -181,36 +181,42 @@ class Scope extends Printable {
   final Scope parent;
   final Map<String, Variable> locals;
 
-  public Variable get(Token token) {
+  public Object get(Token token) {
     String name = token.literal.toString();
     if (locals.containsKey(name)) {
-      return locals.get(name);
+      return locals.get(name).value;
     }
 
     if (parent == null) {
-      throw new VariableException(token, "Variable not defined.");
+      throw new RuntimeError(token, String.format("Variable '%s' not defined.", name));
     }
     return parent.get(token);
   }
 
-  public void declare(Token token, Variable variable) {
-    locals.put(token.literal.toString(), variable);
-    // increment variable.numReferences and decrement oldVar
+  void _declare(String name, Object value) {
+    locals.put(name, new Variable(value));
   }
 
-  public void assign(Token token, Variable variable) {
+  public void declare(Token token, Object value) {
+    _declare(token.literal.toString(), value);
+  }
+
+  public void assign(Token token, Object value) {
     String name = token.literal.toString();
     if (locals.containsKey(name)) {
-      locals.put(name, variable);
+      Variable variable = locals.get(name);
+      variable.set(value);
     } else if (parent == null) {
-      throw new VariableException(token, "Undeclared variable cannot be assigned to.");
+      throw new RuntimeError(token, "Undeclared variable cannot be assigned to.");
     } else {
-      parent.assign(token, variable);
+      parent.assign(token, value);
     }
   }
 
+  // If you create copy, of course an outer update won't update
   public Scope createCopy() {
-    return new Scope(parent, new HashMap<>(locals));
+    Map<String, Variable> copy = new HashMap<>(locals);
+    return new Scope(parent, copy);
   }
 
   public Scope getGlobal() {
@@ -257,17 +263,14 @@ class Variable extends Printable {
     this._printables = Arrays.asList();
   }
 
-  // (alin) should this be final?
-  final Object value;
+  Object value;
+
+  public void set(Object value) {
+    this.value = value;
+  }
 
   public String toString() {
     return "" + value + " (" + value.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(value)) + ")";
-  }
-}
-
-class VariableException extends RuntimeError {
-  public VariableException(Token token, String message) {
-    super(token, message);
   }
 }
 

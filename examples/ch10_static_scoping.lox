@@ -1,19 +1,64 @@
-print("This should raise VariableNotFound:");
-var a = 1;
-fun f() {
-  print(a);
-  print(b);
+fun test_static_scope_inaccessible_defined_after() {
+  var defined_before = 1;
+  fun f() {
+    defined_before;
+    defined_after;
+  }
+  var defined_after = 2;
+  f();
 }
-var b = 2;
-f();
-print("----------");
+assert_raises(test_static_scope_inaccessible_defined_after);
 
-
-print("This should print 2:");
-var c=1;
-fun g() {
-  print(c);
+fun test_static_scope_outer_environment_can_set() {
+  var c=2;
+  fun g() {
+    return c;
+  }
+  c = c+1;
+  return g();
 }
-c = c+1;
-g();
-print("----------");
+assert(test_static_scope_outer_environment_can_set() == 3);
+
+fun test_static_scope_inner_environment_can_set() {
+  var c=2;
+  fun g() {
+    c = c+1;
+  }
+  g();
+  return c;
+}
+assert(test_static_scope_inner_environment_can_set() == 3);
+
+fun test_assert_raises() {
+  undefined = 1;
+}
+assert_raises(test_assert_raises);
+
+fun test_assert_raises_wrong_arguments() {
+  fun f() {
+    var x = 1;
+  }
+  assert_raises(f, "extra arg");
+}
+assert_raises(test_assert_raises_wrong_arguments);
+
+fun test_assert_raises_wrong_first_argument() {
+  fun f() {
+    var x = 1;
+  }
+  assert_raises(1);
+}
+assert_raises(test_assert_raises_wrong_first_argument);
+
+fun test_assert_raises_fails_when_target_succeeds() {
+  fun f() {
+    var x = 1;
+  }
+  assert_raises(f);
+}
+assert_raises(test_assert_raises_fails_when_target_succeeds);
+
+fun test_assert_fails_when_false() {
+  assert(false);
+}
+assert_raises(test_assert_fails_when_false);

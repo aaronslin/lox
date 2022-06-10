@@ -8,6 +8,10 @@ class Interpreter implements Expr.Visitor<Object>,
   Interpreter() {
     this.currentScope = new Scope(null);
     this.recursionDepth = 0;
+
+    this.currentScope._declare("clock", NativeFunctions.CLOCK);
+    this.currentScope._declare("assert", NativeFunctions.ASSERT);
+    this.currentScope._declare("assert_raises", NativeFunctions.ASSERT_RAISES);
   }
 
   final static int MAX_RECURSION_DEPTH = 50;
@@ -22,14 +26,16 @@ class Interpreter implements Expr.Visitor<Object>,
       }
     } catch (RuntimeError error) {
       Lox.runtimeError(error);
+    } catch (AssertionError error) {
+      Lox.assertionError(error);
     }
   }
 
-  private Object evaluate(Expr expr) {
+  protected Object evaluate(Expr expr) {
     return expr.evaluateWith(this);
   }
 
-  public void execute(Statement stmt) {
+  protected void execute(Statement stmt) {
     stmt.executeWith(this);
   }
 
@@ -161,15 +167,14 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object evalVarExpr(Var varName) {
-    Variable variable = currentScope.get(varName.name);
-    return variable.value;
+    return currentScope.get(varName.name);
   }
 
   @Override
   public Object evalAssignExpr(Assign assign) {
-    Variable value = new Variable(evaluate(assign.expr));
+    Object value = evaluate(assign.expr);
     currentScope.assign(assign.name, value);
-    return value.value;
+    return value;
   }
 
   @Override
@@ -182,13 +187,13 @@ class Interpreter implements Expr.Visitor<Object>,
       throw new RuntimeError(func.identifier, "Expression is not callable.");
     }
 
-    LoxFunction loxFunction = (LoxFunction) result;
+    LoxCallable loxCallable = (LoxCallable) result;
   
     // Evaluate arguments in outer scope
-    if (func.parameters.size() != loxFunction.arity()) {
-      throw new RuntimeError(func.identifier, String.format("Expected %s arguments, but got %s.", loxFunction.arity(), func.parameters.size()));
+    if (!loxCallable.isValidArity(func.arguments.size())) {
+      throw new RuntimeError(func.identifier, String.format("Expected %s arguments, but got %s.", loxCallable.arityString(), func.arguments.size()));
     }
-    List<Object> args = evalSeries(func.parameters);
+    List<Object> args = evalSeries(func.arguments);
 
     // (alin) should this evaluate args first or check recursion depth?
     // Check recursion depth
@@ -200,7 +205,7 @@ class Interpreter implements Expr.Visitor<Object>,
     Scope outerScope = currentScope;
     try {
       recursionDepth++;
-      return loxFunction.call(this, args);
+      return loxCallable.call(this, args);
     } finally {
       recursionDepth--;
       // (alin) please check. 
@@ -236,8 +241,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void execVarStmt(VarStmt stmt) {
-    Variable value = new Variable(evaluate(stmt.expr));
-    currentScope.declare(stmt.name, value);
+    currentScope.declare(stmt.name, evaluate(stmt.expr));
     return null;
   }
 
@@ -302,7 +306,7 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Void execFuncStmt(FuncStmt stmt) {
     LoxFunction func = new LoxFunction(stmt, currentScope);
-    currentScope.declare(stmt.name.name, new Variable(func));
+    currentScope.declare(stmt.name.name, func);
     return null;
   }
 
@@ -312,20 +316,6 @@ class Interpreter implements Expr.Visitor<Object>,
       throw new RuntimeError(stmt.token, "Cannot return out of global scope.");
     }
     throw new ReturnException(evaluate(stmt.expr));
-  }
-}
-
-class ReturnException extends RuntimeException {
-  public ReturnException(Object value) {
-    this.value = value;
-  }
-
-  Object value;
-}
-
-class InterpreterCastException extends Exception {
-  public InterpreterCastException(String javaType, Object obj) {
-    super(String.format("Cannot cast %s (type: %s) to %s.", obj, obj.getClass().getName(), javaType));
   }
 }
 

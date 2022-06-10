@@ -79,4 +79,8 @@ public class Lox {
         "\n[line " + error.token.line + "]");
     hadRuntimeError = true;
   }
+  static void assertionError(AssertionError error) {
+    System.err.println(error.getMessage());
+    hadRuntimeError = true;
+  }
 }
