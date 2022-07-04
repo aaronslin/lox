@@ -10,10 +10,12 @@ abstract class Expr extends Lexeme {
     public T evalAssignExpr(Assign assign);
     public T evalBinaryExpr(Binary binary);
     public T evalEmptyExpr(Empty empty);
-    public T evalFuncExpr(Func func);
+    public T evalCallExpr(Call func);
     public T evalGroupingExpr(Grouping grouping);
     public T evalLiteralExpr(Literal literal);
     public T evalLogicalExpr(Logical logical);
+    public T evalPropertyExpr(Property get);
+    public T evalThisExpr(This logical);
     public T evalUnaryExpr(Unary unary);
     public T evalVarExpr(Var variable);
   };
@@ -162,18 +164,21 @@ class Var extends Expr {
 }
 
 class Assign extends Expr {
-  Assign(Token name, Expr expr) {
-    this.name = name;
-    this.expr = expr;
-    this._printables = Arrays.asList(expr);
+  Assign(Expr assignee, Token token, Expr value) {
+    this.assignee = assignee;
+    this.token = token;
+    this.value = value;
+    this._printables = Arrays.asList(assignee, value);
   }
 
-  final Token name;
-  final Expr expr;
+  // This token is used for error handling purposes.
+  final Token token; 
+  final Expr assignee;
+  final Expr value;
 
   @Override
   public String toString() {
-    return "" + name + "=" +expr;
+    return "" + assignee + "=" + value;
   }
 
   @Override
@@ -182,15 +187,16 @@ class Assign extends Expr {
   }
 }
 
-class Func extends Expr {
-  Func(Token identifier, Expr callee, Series arguments) {
-    this.identifier = identifier;
+class Call extends Expr {
+  Call(Token token, Expr callee, Series arguments) {
+    this.token = token;
     this.callee = callee;
     this.arguments = arguments;
     this._printables = Arrays.asList(callee, arguments);
   }
 
-  final Token identifier;
+  // The token is used for error handling purposes.
+  final Token token;
   final Expr callee;
   final Series arguments;
 
@@ -201,7 +207,49 @@ class Func extends Expr {
 
   @Override
   public Object evaluateWith(Expr.Visitor<Object> visitor) {
-    return visitor.evalFuncExpr(this);
+    return visitor.evalCallExpr(this);
+  }
+}
+
+
+class This extends Expr {
+  This(Token token) {
+    this.token = token;
+    this._printables = Arrays.asList(token);
+  }
+
+  final Token token;
+
+  @Override
+  public String toString() {
+    return "" + token;
+  }
+
+  @Override
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalThisExpr(this);
+  }
+}
+
+
+class Property extends Expr {
+  Property(Expr left, Token right) {
+    this.left = left;
+    this.right = right;
+    this._printables = Arrays.asList(left, right);
+  }
+
+  final Expr left;
+  final Token right;
+
+  @Override
+  public String toString() {
+    return "" + left + "." + right;
+  }
+
+  @Override
+  public Object evaluateWith(Expr.Visitor<Object> visitor) {
+    return visitor.evalPropertyExpr(this);
   }
 }
 
@@ -209,7 +257,7 @@ class Func extends Expr {
 class Series<T extends Expr> extends Lexeme {
   Series(List<T> members) {
     this.members = members;
-    this._printables = members;
+    this._printables.addAll(members);
   }
 
   final List<T> members;

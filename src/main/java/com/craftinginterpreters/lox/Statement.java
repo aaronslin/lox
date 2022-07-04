@@ -6,11 +6,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 abstract class Statement extends Printable {
+  // Token used for stack traces and line numbers. There ought to be a more 
+  // methodical way to choose which token to associate with. 
+  Token indicator;
+
   abstract public Void executeWith(Visitor<Void> visitor);
   
   interface Visitor<T> {
     public T execBlockStmt(BlockStmt stmt);
     public T execExprStmt(ExprStmt stmt);
+    public T execClassStmt(ClassStmt stmt);
     public T execForStmt(ForStmt stmt);
     public T execFuncStmt(FuncStmt stmt);
     public T execIfStmt(IfStmt stmt);
@@ -22,8 +27,9 @@ abstract class Statement extends Printable {
 }
 
 class ExprStmt extends Statement {
-  ExprStmt(Expr expr) {
+  ExprStmt(Expr expr, Token indicator) {
     this.expr = expr;
+    this.indicator = indicator;
     this._printables = Arrays.asList(expr);
   }
 
@@ -35,8 +41,9 @@ class ExprStmt extends Statement {
 }
 
 class PrintStmt extends Statement {
-  PrintStmt(Expr expr) {
+  PrintStmt(Expr expr, Token indicator) {
     this.expr = expr;
+    this.indicator = indicator;
     this._printables = Arrays.asList(expr);
   }
 
@@ -48,10 +55,11 @@ class PrintStmt extends Statement {
 }
 
 class VarStmt extends Statement {
-  VarStmt(Token name, Expr expr) {
+  VarStmt(Token name, Expr expr, Token indicator) {
     this.name = name;
     this.expr = expr;
-    this._printables = Arrays.asList(expr);
+    this.indicator = indicator;
+    this._printables = Arrays.asList(name, expr);
   }
 
   final Token name;
@@ -63,9 +71,10 @@ class VarStmt extends Statement {
 }
 
 class BlockStmt extends Statement {
-  BlockStmt(List<Statement> statements) {
+  BlockStmt(List<Statement> statements, Token indicator) {
     this.statements = statements;
-    this._printables = statements;
+    this.indicator = indicator;
+    this._printables.addAll(statements);
   }
 
   final List<Statement> statements;
@@ -76,9 +85,10 @@ class BlockStmt extends Statement {
 }
 
 class WhileStmt extends Statement {
-  WhileStmt(Expr condition, Statement body) {
+  WhileStmt(Expr condition, Statement body, Token indicator) {
     this.condition = condition;
     this.body = body;
+    this.indicator = indicator;
     this._printables = Arrays.asList(condition, body);
   }
   
@@ -95,12 +105,14 @@ class ForStmt extends Statement {
     Statement initializer, 
     Expr condition, 
     Statement iterator, 
-    Statement body
+    Statement body,
+    Token indicator
   ) {
     this.initializer = initializer;
     this.condition = condition;
     this.iterator = iterator;
     this.body = body;
+    this.indicator = indicator;
     this._printables = Arrays.asList(initializer, condition, iterator, body);
   }
 
@@ -115,10 +127,11 @@ class ForStmt extends Statement {
 }
 
 class IfStmt extends Statement {
-  IfStmt(Expr condition, Statement then, Statement otherwise) {
+  IfStmt(Expr condition, Statement then, Statement otherwise, Token indicator) {
     this.condition = condition;
     this.then = then;
     this.otherwise = otherwise;
+    this.indicator = indicator;
     this._printables = Arrays.asList(condition, then, otherwise);
   }
 
@@ -131,15 +144,37 @@ class IfStmt extends Statement {
   }
 }
 
+class ClassStmt extends Statement {
+  ClassStmt(Token name, List<VarStmt> properties, List<FuncStmt> methods, Token indicator) {
+    this.name = name;
+    this.properties = properties;
+    this.indicator = indicator;
+    this.methods = methods;
+
+    this._printables.add(name);
+    this._printables.addAll(properties);
+    this._printables.addAll(methods);
+  }
+
+  final Token name;
+  final List<VarStmt> properties;
+  final List<FuncStmt> methods;
+
+  public Void executeWith(Statement.Visitor<Void> visitor) {
+    return visitor.execClassStmt(this);
+  }
+}
+
 class FuncStmt extends Statement {
-  FuncStmt(Var name, Series<Var> parameters, BlockStmt body) {
+  FuncStmt(Token name, Series<Var> parameters, BlockStmt body, Token indicator) {
     this.name = name;
     this.parameters = parameters;
     this.body = body;
+    this.indicator = indicator;
     this._printables = Arrays.asList(name, parameters, body);
   }
 
-  final Var name;
+  final Token name;
   final Series<Var> parameters;
   final BlockStmt body;
 
@@ -149,13 +184,12 @@ class FuncStmt extends Statement {
 }
 
 class ReturnStmt extends Statement {
-  ReturnStmt(Token token, Expr expr) {
-    this.token = token;
+  ReturnStmt(Expr expr, Token indicator) {
     this.expr = expr;
+    this.indicator = indicator;
     this._printables = Arrays.asList(expr);
   }
 
-  final Token token;
   final Expr expr;
 
   public Void executeWith(Statement.Visitor<Void> visitor) {
@@ -164,7 +198,6 @@ class ReturnStmt extends Statement {
 }
 
 
-// (alin) should eventually handle reference counting for the closure case
 class Scope extends Printable {
   Scope(Scope parent) {
     this.parent = parent;
@@ -188,7 +221,7 @@ class Scope extends Printable {
     }
 
     if (parent == null) {
-      throw new RuntimeError(token, String.format("Variable '%s' not defined.", name));
+      throw new EnvironmentException();
     }
     return parent.get(token);
   }
@@ -207,16 +240,26 @@ class Scope extends Printable {
       Variable variable = locals.get(name);
       variable.set(value);
     } else if (parent == null) {
-      throw new RuntimeError(token, "Undeclared variable cannot be assigned to.");
+      throw new EnvironmentException();
     } else {
       parent.assign(token, value);
     }
   }
 
-  // If you create copy, of course an outer update won't update
-  public Scope createCopy() {
-    Map<String, Variable> copy = new HashMap<>(locals);
-    return new Scope(parent, copy);
+  public Scope copyReferences() {
+    // Creates scope with a `locals` map storing the same `(k,v)` pairs.
+    // The map values reuse the same Variables.
+    Map<String, Variable> newLocals = new HashMap<>(locals);
+    return new Scope(parent, newLocals);
+  }
+
+  public Scope copyValues() {
+    Map<String, Variable> newLocals = new HashMap<>();
+    for (String name : locals.keySet()) {
+      Object value = locals.get(name).value;
+      newLocals.put(name, new Variable(value));
+    }
+    return new Scope(parent, newLocals);
   }
 
   public Scope getGlobal() {
@@ -270,6 +313,9 @@ class Variable extends Printable {
   }
 
   public String toString() {
+    if (value == null) {
+      return "null";
+    }
     return "" + value + " (" + value.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(value)) + ")";
   }
 }

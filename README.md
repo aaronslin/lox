@@ -15,6 +15,10 @@ java -cp target/lox-interpreter-1.0-with-dependencies.jar com.craftinginterprete
 
 # Chapter Notes
 
+
+### Ch. ???
+
+
 ### Ch. 6: 
 
 The really cool thing is that this grammar can be unpacked very nicely into parsing code!
@@ -33,6 +37,30 @@ The really cool thing is that this grammar can be unpacked very nicely into pars
 
 - Why is equality a different order of operation than comparison?
 - "Each rule here only matches expressions at its precedence level or higher. " Hence:
+
+
+/* 
+Notes:
+ - Here I execute an Expr tree. (As opposed to compiling to machine code or other options)
+ - Lox is dynamically typed but Java is static!
+
+Corrections:
+0 / 0 (returns NaN, but should throw error)
+
+Misleading error messages:
+)
+5 + "hi"
+5 hi ("Cannot end with expression")
+---- ("Must start with expression")
+
+Feature differences:
+ - the book's interpreter doesn't allow addition on booleans. 
+ - the book's interpreter evaluates strings (even "") to true. Mine throws.
+ - My interpreter lacks an interpret() method to map Java output values into
+   Lox string that is shown to the user.
+ - the book's interpreter uses the visitor pattern to write the evaluate()
+   methods in the Interpreter, instead of scattering it into the Expr classes.
+*/
 
 ### Ch. 8:
 - Handle execute() Runtime errors
@@ -157,3 +185,107 @@ bar(() -> foo());
   - book implementation of `LoxCallable` extends to classes, with an `arity()` and `call()` method.
   - my implementation throws a RuntimeError when executing `return` in global scope.
   - my implementation lacks a maximum argument length
+
+Ch. 11
+
+- Book uses persistent data structures to split environments. Not sure how they're efficient, but they sound interesting.
+- This is a really good observation: "We know static scope means that a variable usage always resolves to the same declaration, which can be determined just by looking at the text. Given that, why are we doing it dynamically every time? Doing so doesn’t just open the hole that leads to our annoying bug, it’s also needlessly slow."
+- Book uses a resolver class, which occurs between parsing and interpreting, to dereference variable mappings.
+  This is interesting because the resolver can be used for other static tasks, like type checking and what not.
+  The main differences between resolution and interpreting is:
+    * no side effects (no prints)
+    * control flow is ignored (loops visited once, both if branches visited, etc.)
+- Book counts the number of nested environment lookups once during resolution and turns it into a pointer dereference.
+  So even if global <= block <= fun has 3-level lookup, the difference is that in the old code (ignoring correctness issues)
+  it makes 3 hashmap lookups, which are slow in comparison to 3 pointer dereferences.
+- Book treats this as a compile error (because it would be confusing for the `a`'s to refer to different things):
+
+```
+var a = "hi";
+{
+  var a = a;
+}
+```
+
+This means that there is a moment during variable declaration when it is unavailable but declared.
+- handling stray returns is done by the resolver, which answers an earlier question
+- "Why is it safe to eagerly define the variable bound to a function’s name when other variables must wait until after they are initialized before they can be used?"
+  Because variable declarations can be initialized to an expr that refers to the same variable name. In this case, it is ambiguous which scope that variable refers to.
+  OTOH, a function body and parameters are always defined in a new scope created by the function, sidestepping the potential ambiguity.
+
+Ch. 13
+
+- Good error handling system: Two parts: Parsing and Interpreting
+  Parsing: "error at blah" should refer to the line with blah, not the preceding line.
+  Interpreting: 
+    So the interpreter should always have: line numbers, stacktrace. 
+    Flag to print the environment info.
+    Or just learn to use a java debugger?
+    A way to print an object as it was typed in (not the Java object)
+
+Raw notes:
+```
+/* 
+
+def evaluate():
+  value = Expr.visitExpr(expr)
+  if (value instanceof LoxInstance) {
+    lastGet = value;
+  } else {
+    lastGet = null;
+  }
+
+
+class Bird { var name = "[noname]"; }
+fun f() {
+  var c = Bird("Lita");
+  return c.introduce;
+}
+var g = f();
+g(); // prints Lita
+
+
+// recency
+a = Dog();
+b = a.get_name;
+c = Cat().identity(b); // reset lastGet
+c(); // should be ~ a.get_name()
+
+f(a.get_instance(), foo());
+
+A method's owner is never changes, once instantiated.
+But Interpreter also needs to know how to interpret `this` without knowing it's in a function call.
+ ... or.... keep a call stack?
+
+Strategy:
+ - Interpreter keeps a call stack. `evalThis` looks at `currentFunc.owner -> LoxInstance or null`
+ - LoxCallable: associate each with an `owner` at construction time. 
+    - Classes, native functions, functions don't have owners.
+    - Instances have different methods. Or methods can be wrapped to lookup the instance, then call.
+ - Instantiating: For each method, rebind its owner to the new instance.
+ - evalProperty/evalCall
+
+
+ OR
+
+ - When entering a callable, set currentMethod = foo, and foo.owner. (This /is/ a call stack.)
+
+Class and object methods:
+  x. when class method updates, the object method should too.
+  y. but the method should operate on different objects.
+
+3 cases for passing the object to the method:
+LoxCallable(Interpreter, args) 
+1. associate object with LoxCallable
+  a. directly -- impossible because of (x)
+  b. indiectly -- Method(ClassFunction(Environment), Owner)
+2. associate object with Interpreter
+  - tough to get a single global `currentObject` correct (if possible at all)
+    - anything that returns a loxCallable must update it.
+    - but it is not necessarily the most recent object. (see 'recency' test)
+  - the object should "live with" the method.
+3. associate it with args. out of question.
+
+ 
+*/ 
+```

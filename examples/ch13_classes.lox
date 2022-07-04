@@ -1,0 +1,476 @@
+// TEST CASES
+
+
+// Classes can be returned. Static scoping.
+fun test_classes_can_be_returned() {
+  var a = 2;
+  var c = 4;
+  fun f() {
+    var a = 1;
+
+    // Define C here
+    class C {
+      ret_a() {
+        return a;
+      }
+      rows_b() {
+        return b;
+      }
+      modify_c() {
+        c = 5;
+      }
+    }
+    a = 3;
+    var b = 4;
+    return C;
+  }
+  var the_class = f()();
+
+  fun test_b() {
+    var output = the_class.throws_b();
+  }
+
+  assert(the_class.ret_a() == 3);
+  assert_raises(test_b);
+  the_class.modify_c();
+  assert(c==5);
+}
+test_classes_can_be_returned();
+
+// Class attributes are distinct objects
+fun test_class_attributes_are_distinct() {
+  class Cat {
+    var age = 1;
+  }
+
+  var alice = Cat();
+  var billy = Cat();
+  alice.age = 2;
+  assert(billy.age == 1);
+}
+test_class_attributes_are_distinct();
+
+fun test_this_private() {
+  var global = "global";
+  class Cat {
+    var isHappy = false;
+    var local = global;
+    var age = 2;
+    pet() {
+      isHappy = true;
+    }
+  }
+  var alice = Cat();
+  fun global_not_property() {
+    alice.global;
+  }
+
+  // not OK
+  assert_raises(global_not_property);
+  assert_raises(alice.pet);
+}
+
+fun test_class_declaration() {
+  var b = 2;
+  fun ret_3() {
+    var b = 5;
+    return 3;
+  }
+  class C {
+    var age = (b=1);
+
+    // this shouldn't mutate global scope
+    var ssn = ret_3();
+
+    method() {
+      // this shouldn't share environments
+      return this.b;
+    }
+  }
+  var c = C();
+  assert(b == 1);
+  assert_raises(c.method);
+}
+test_class_declaration();
+
+fun test_class_method_precedes_property() {
+  class C {
+    var blah = 1;
+    blah() { return 1; }
+  }
+
+  class D {
+    blah() { return 1; }
+    var blah = 1;
+  }
+  assert(C.blah());
+  assert(D.blah());
+  assert(C.blah != 1);
+  assert(D.blah != 1);
+}
+test_class_method_precedes_property();
+
+fun test_method_can_recurse() {
+  class Factorial {
+    fact(n) {
+      if (n <= 0) {
+        return 1;
+      }
+      return this.fact(n-1) * n;
+    }
+  }
+  var factory = Factorial();
+  // A class method cannot reference itself with `this`, unlike in Python.
+  assert_raises(Factorial.fact, 3);
+  assert(factory.fact(3) == 6);
+}
+test_method_can_recurse();
+
+// this fails because C is not defined when make_parent is declared
+fun test_inner_class_cannot_access_outer() {
+  class C {
+    var x;
+    init(x) {
+      this.x = x;
+    }
+    make_default() {
+      return C();
+    }
+  }
+  assert_raises(C.make_default);
+}
+test_inner_class_cannot_access_outer();
+
+
+// o-------------o
+// | CONSTRUCTOR |
+// o-------------o
+
+fun test_constructor_cannot_be_called() {
+  // If calling the constructor ever changes in the future, make sure this passes:
+  // class C { init() {} clone() { return this.init(); }} var a = C(); var b = C();    // assert b!=a
+
+  class C {
+    var age;
+    init(age) {
+      this.age = age;
+    }
+  }
+  var c = C(3);
+  var d = c.init(4);
+}
+assert_raises(test_constructor_cannot_be_called);
+
+fun test_constructor_cannot_call_self() {
+  class C {
+    var x;
+    init(x) {
+      if (x > 0) {
+        init(x-1);
+      }
+    }
+  }
+  var c = C(3);
+}
+assert_raises(test_constructor_cannot_call_self);
+
+fun test_constructor_return_ok() {
+  class D {
+    var x = 100;
+  }
+
+  class C {
+    var x;
+    init() {
+      this.x = 1;
+      return D();
+      this.x = 2;
+    }
+  }
+  var c = C();
+  assert(c.x == 1);
+}
+test_constructor_return_ok();
+
+fun test_default_constructor_ok() {
+  class C { var x = 1; }
+  c = C();
+  assert(c.x == 1);
+}
+
+fun test_constructor_ok() {
+  var age = 5;
+
+  class C {
+    init(age) {
+      this.age = age;
+    }
+
+    get_age() {
+      return this.age;
+    }
+
+    get_outer_age() {
+      return age;
+    }
+
+    var age = 0;
+  }
+
+  var c = C(10);
+
+  assert(c.age == 10);
+  assert(c.get_age() == 10);
+  assert(c.get_outer_age() == 5);
+}
+
+test_constructor_ok();
+
+// o-----------o
+// | INSTANCES |
+// o-----------o
+
+fun test_instance_methods_inherit_class_environment() {
+  var a = 1;
+  class C { 
+    do_something() {
+      return a;
+    }
+  }
+  fun another_function() {
+    var a = 2;
+    var c = C();
+    return c.do_something(); 
+  }
+  assert(another_function() == 1); // matches Java and Python behavior
+  a = 3;
+  assert(another_function() == 3);
+}
+test_instance_methods_inherit_class_environment();
+
+fun test_instance_fields_evaluated_at_class_declaration() {
+  var b = 1;
+  class D {
+    var age = b;
+  }
+  b = 2;
+  assert(D.age == 1);
+  assert(D().age == 1);
+}
+test_instance_fields_evaluated_at_class_declaration();
+
+// fun test_instance_class_fields() {
+//   class C {
+//     greet() {
+//       return "hi";
+//     }
+//   }
+//   var c = C();
+//   fun classGreet() {
+//     return "cheers";
+//   }
+//   fun instanceGreet() {
+//     return "yo";
+//   }
+// 
+//   // Instance inherits class updates
+//   C.greet = classGreet;
+//   print(C.greet());
+//   print(c.greet());
+//   assert(c.greet() == "cheers");
+// 
+//   // Class does not inherit instance updates
+//   c.greet = instanceGreet;
+//   assert(C.greet() == "cheers");
+// }
+// // (alin) This test fails because an instance and its class map methods to different java objects.
+// test_instance_class_fields();
+
+fun test_multiple_instances() {
+  class C {
+    var x = 0;
+    init(x) {
+      this.x = x;
+    }
+
+    set_a() {
+      var a = this.x;
+    }
+
+    get_a() {
+      return a;
+    }
+  }
+
+  // fields are set independently
+  var c = C(1);
+  var d = C(2);
+  assert(C.x == 0);
+  assert(c.x == 1);
+  assert(d.x == 2);
+
+  // methods use separate environments
+  fun get_a(instance) { instance.get_a(); }
+  d.set_a();
+  assert_raises(get_a, d);
+  assert_raises(get_a, c);
+}
+test_multiple_instances();
+
+// o------o
+// | THIS |
+// o------o
+
+fun test_class_has_no_this() {
+  class C {
+    var x = 1;
+    get_x() {
+      return this.x;
+    }
+  }
+  var c = C();
+  fun get_x(obj) { return c.get_x(); }
+  assert(get_x(c) == 1);
+  assert_raises(get_x, C);
+}
+
+fun test_set_this() {
+  class C {
+    var x;
+    init(x) {
+      this.x = x;
+    }
+    set_x(x) {
+      this.x = x;
+    }
+  }
+  var c = C(1);
+  assert(c.x == 1);
+  c.set_x(2);
+  assert(c.x == 2);
+}
+test_set_this();
+
+fun test_which_this() {
+  class Int {
+    var level;
+    var successor;
+
+    init(level) {
+      this.level = level;
+    }
+
+    get_level() {
+      return this.level;
+    }
+  }
+
+  var a0 = Int(0);
+  var a1 = Int(1);
+  var a2 = Int(2);
+  a0.successor = a1;
+  a1.successor = a2;
+
+  assert(a0.get_level() == 0);
+  assert(a0.successor.get_level() == 1);
+  assert(a1.successor.get_level() == 2);
+  assert(a0.successor.successor.get_level() == 2);
+}
+test_which_this();
+
+fun test_which_this_2() {
+  class C {
+    var x;
+    do_something() {
+      return this.x;
+    }
+  }
+  fun create_C(x) {
+    var c = C();
+    c.x = x;
+    return c;
+  }
+
+  // assert `this` in `do_something` uses the method, not the creator function.
+  assert(create_C(1).do_something() == 1);
+}
+
+fun test_cannot_override_this() {
+  class C {
+    var x;
+    init(x) {
+      this.x = x;
+    }
+    set_this(x) {
+      this = x;
+      return this.x;
+    }
+  }
+  var c = C(1);
+  var d = C(2);
+  assert_raises(c.set_this, d);
+}
+test_cannot_override_this();
+
+// o----------------o
+// | PARSING ERRORS |
+// o----------------o
+
+// fun test_this_keyword() {
+//   var this = 1;
+// }
+
+// fun this_private() {
+//   alice.this;
+// }
+
+// o--------------o
+// | PROPERTY GET |
+// o--------------o
+
+fun test_class_instance_get() {
+  class C {
+    var a = 1;
+    get_a() { return this.a; }
+  }
+
+  var c = C();
+  // OK
+  assert(C.a==1);
+  assert(c.a==1);
+  assert(c.get_a()==1);
+
+  // Attribute not found
+  fun get_b(obj) { return obj.b; }
+  assert_raises(get_b, C);
+  assert_raises(get_b, c);
+
+  // type error
+  var d = 1;
+  assert_raises(get_b, d);
+  assert_raises(get_b, 1);
+}
+test_class_instance_get();
+
+fun test_no_this_leak() {
+  class C {
+    var a = 1;
+    var b = 2;
+    get_a() { return this.a; }
+  }
+  var c = C();
+  fun raw_func() {
+    return this.b;
+  }
+
+  fun bad() { return c.get_a() + raw_func(); }
+  assert_raises(bad);
+}
+test_no_this_leak();
+
+
+// left off here
+// fails: to set `this.x = 1` in the constructor bc of how this is set.
+// fails: test_cannot_override_this
+// fix the first test
+// nested classes not allowed

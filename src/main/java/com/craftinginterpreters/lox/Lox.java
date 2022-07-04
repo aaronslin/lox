@@ -29,7 +29,9 @@ public class Lox {
 
     // Indicate an error in the exit code.
     if (hadError) System.exit(65);
-    if (hadRuntimeError) System.exit(70);
+
+    // (alin) UNCOMMENT
+    // if (hadRuntimeError) System.exit(70);
   }
   private static void runPrompt() throws IOException {
     InputStreamReader input = new InputStreamReader(System.in);
@@ -52,10 +54,13 @@ public class Lox {
     // Stop if there was a syntax error.
     if (hadError) return;
     
+    // // parser debugging
     // for (Statement stmt : statements) {
     //   stmt.print();
     // }
-    interpreter.interpret(statements);
+    for (Statement stmt : statements) {
+      interpreter.interpret(stmt);
+    }
   }
   static void error(int line, String message) {
     report(line, "", message);
@@ -75,12 +80,36 @@ public class Lox {
     }
   }
   static void runtimeError(RuntimeError error) {
+    System.err.println("\n[RUNTIME ERROR]");
+    printLoxStackTrace(error.debugInfo);
     System.err.println(error.getMessage() +
         "\n[line " + error.token.line + "]");
     hadRuntimeError = true;
   }
   static void assertionError(AssertionError error) {
+    System.err.println("\n[ASSERTION ERROR]");
+    printLoxStackTrace(error.debugInfo);
     System.err.println(error.getMessage());
     hadRuntimeError = true;
+  }
+  // TODO: modify javaError to encapsulate debugInfo
+  static void javaError(JavaError error, DebugInfo debugInfo) {
+    System.err.println("\n[FATAL]");
+    printLoxStackTrace(debugInfo);
+    error.error.printStackTrace();
+    System.err.println(error.error);
+    hadRuntimeError = true;
+  }
+
+  static void printLoxStackTrace(DebugInfo debugInfo) {
+    for (Statement stmt : debugInfo.executionStack) {
+      System.err.printf("[line %s]\n", stmt.indicator.line);
+      stmt.print();
+    }
+
+    System.err.println("Call stack:");
+    for (LoxCallable callable : debugInfo.callStack) {
+      System.err.println("  " + callable);
+    }
   }
 }

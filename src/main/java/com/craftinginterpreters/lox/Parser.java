@@ -7,7 +7,7 @@ import static com.craftinginterpreters.lox.TokenType.*;
 
 class Parser {
   private final List<Token> tokens;
-  private int current = 0;
+  private int currentToken = 0;
 
   Parser(List<Token> tokens) {
     this.tokens = tokens;
@@ -24,6 +24,7 @@ class Parser {
     try {
       if (check(VAR)) return varDeclaration();
       if (match(FUN)) return funcDeclaration();
+      if (check(CLASS)) return classDeclaration();
 
       return statement();
     } catch (ParseError error) {
@@ -35,28 +36,50 @@ class Parser {
     Token varToken = consume(VAR, "Expect keyword 'var'.");
     Token name = consume(IDENTIFIER, "Expect variable name.");
 
-    Expr initializer = null;
+    Expr initializer = new Empty();
     if (match(EQUAL)) {
       initializer = expression();
     }
 
     consume(SEMICOLON, "Expect ';' after variable declaration.");
-    return new VarStmt(name, initializer);
+    return new VarStmt(name, initializer, varToken);
   }
   private Statement funcDeclaration() {
     List<Statement> statements = new ArrayList<>();
 
     Token identifier = consume(IDENTIFIER, "Expect function name.");
-    consume(LEFT_PAREN, "Expect '(' after function name.");
+    consume(LEFT_PAREN, String.format("Expect '(' after function name '%s'.", identifier));
     _GetExpression getParameter = () -> parameter();
     Series<Var> parameters = series(RIGHT_PAREN, getParameter);
-    consume(LEFT_BRACE, "Expect '{' after function header.");
+    Token blockToken = consume(LEFT_BRACE, "Expect '{' after function header.");
     while (!check(RIGHT_BRACE) && !isAtEnd()) {
       statements.add(declaration());
     }
-    consume(RIGHT_BRACE, "Expect '}' after function body.");
+    consume(RIGHT_BRACE, String.format("Expect '}' after function body for '%s'.", identifier));
 
-    return new FuncStmt(new Var(identifier), parameters, new BlockStmt(statements));
+    return new FuncStmt(identifier, parameters, new BlockStmt(statements, blockToken), identifier);
+  }
+  private Statement classDeclaration() {
+    List<VarStmt> properties = new ArrayList<>();
+    List<FuncStmt> methods = new ArrayList<>();
+
+    Token classToken = consume(CLASS, "Expect keyword 'class'.");
+    Token className = consume(IDENTIFIER, "Expect identifier for class name.");
+    // (alin) this doesn't support extension yet.
+    consume(LEFT_BRACE, "Expect '{' after class name.");
+    while (!check(RIGHT_BRACE) && !isAtEnd()) {
+      // (alin) for now, body only supports methods and properties. Disallow nested classes
+      if (check(VAR)) {
+        properties.add((VarStmt) varDeclaration());
+      } else {
+        // Methods do not require the FUN keyword.
+        methods.add((FuncStmt) funcDeclaration());
+      }
+    }
+    consume(RIGHT_BRACE, "Expect '}' after class definition.");
+    // (alin) not sure if this suffices.
+    // (alin) this doesn't support constructors.
+    return new ClassStmt(className, properties, methods, classToken);
   }
   private Var parameter() {
     if (match(IDENTIFIER)) {
@@ -66,29 +89,33 @@ class Parser {
   }
   private Statement statement() {
     if (check(RETURN)) return returnStatement();
-    if (match(PRINT)) return printStatement();
-    if (match(LEFT_BRACE)) return new BlockStmt(block());
-    if (match(IF)) return conditional();
-    if (match(WHILE)) return whileLoop();
-    if (match(FOR)) return forLoop();
+    if (check(PRINT)) return printStatement();
+    if (match(LEFT_BRACE)) return new BlockStmt(block(), previous());
+    if (check(IF)) return conditional();
+    if (check(WHILE)) return whileLoop();
+    if (check(FOR)) return forLoop();
 
     return expressionStatement();
   }
   private Statement returnStatement() {
-    Token token = consume(RETURN, "Expect 'return' keyword.");
+    Token returnToken = consume(RETURN, "Expect 'return' keyword.");
+    if (match(SEMICOLON)) return new ReturnStmt(new Empty(), returnToken);
+
     Expr expr = expression();
     consume(SEMICOLON, "Expect ';' after return statement.");
-    return new ReturnStmt(token, expr);
+    return new ReturnStmt(expr, returnToken);
   }
   private Statement printStatement() {
+    Token printToken = consume(PRINT, "Expect 'print' keyword.");
     Expr value = expression();
     consume(SEMICOLON, "Expect ';' after value.");
-    return new PrintStmt(value);
+    return new PrintStmt(value, printToken);
   }
   private Statement expressionStatement() {
+    Token firstToken = peek();
     Expr expr = expression();
     consume(SEMICOLON, "Expect ';' after expression.");
-    return new ExprStmt(expr);
+    return new ExprStmt(expr, firstToken);
   }
   private List<Statement> block() {
     List<Statement> statements = new ArrayList<>();
@@ -101,29 +128,32 @@ class Parser {
     return statements;
   }
   private Statement forLoop() {
+    Token forToken = consume(FOR, "Expect 'for' keyword.");
     consume(LEFT_PAREN, "Expect '(' after 'for'.");
     Statement initializer = varDeclaration();
     Expr condition = expression();
-    consume(SEMICOLON, "Expect ';' after 'for' condition.");
+    Token iteratorToken = consume(SEMICOLON, "Expect ';' after 'for' condition.");
     Expr iterator = assignment();
     consume(RIGHT_PAREN, "Expect ')' after 'for'.");
     Statement body = statement();
-    return new ForStmt(initializer, condition, new ExprStmt(iterator), body);
+    return new ForStmt(initializer, condition, new ExprStmt(iterator, iteratorToken), body, forToken);
   }
   private Statement whileLoop() {
+    Token whileToken = consume(FOR, "Expect 'while' keyword.");
     Expr condition = primary();
     Statement statement = statement();
-    return new WhileStmt(condition, statement);
+    return new WhileStmt(condition, statement, whileToken);
   }
   private Statement conditional() {
+    Token ifToken = consume(IF, "Expect 'if' keyword.");
     Expr condition = primary();
     Statement then = statement();
-    Statement otherwise = new BlockStmt(new ArrayList<>());
+    Statement otherwise = new BlockStmt(new ArrayList<>(), ifToken);
     
     if (match(ELSE)) {
       otherwise = statement();
     }
-    return new IfStmt(condition, then, otherwise);
+    return new IfStmt(condition, then, otherwise, ifToken);
   }
   private Expr expression() {
     return assignment();
@@ -134,13 +164,7 @@ class Parser {
     if (match(EQUAL)) {
       Token equals = previous();
       Expr value = assignment();
-
-      if (expr instanceof Var) {
-        Token name = ((Var)expr).name;
-        return new Assign(name, value);
-      }
-
-      error(equals, "Invalid assignment target."); // [no-throw]
+      return new Assign(expr, equals, value);
     }
 
     return expr;
@@ -219,12 +243,42 @@ class Parser {
       return new Unary(operator, right);
     }
 
+    return callableOrFieldable();
+  }
+
+  private Expr callableOrFieldable() {
+    Token token = peek();
+    Expr expr = identifier();
+
+    while (true) {
+      if (match(DOT)) {
+        token = consume(IDENTIFIER, "Expect property name.");
+        expr = new Property(expr, token);
+      } else if (match(LEFT_PAREN)) {
+        expr = new Call(
+          token, 
+          expr, 
+          series(RIGHT_PAREN, (_GetExpression)() -> expression())
+        );
+      } else {
+        break;
+      }
+    }
+
+    return expr;
+  }
+
+  private Expr identifier() {
+    if (match(THIS)) return new This(previous());
+    if (match(IDENTIFIER)) return new Var(previous());
     return primary();
   }
+
   private Expr primary() {
     if (match(FALSE)) return new Literal(false);
     if (match(TRUE)) return new Literal(true);
     if (match(NIL)) return new Literal(null);
+    if (match(THIS)) return new This(previous());
 
     if (match(NUMBER, STRING)) {
       return new Literal(previous().literal);
@@ -236,21 +290,9 @@ class Parser {
       return new Grouping(expr);
     }
 
-    return callable();
-  }
-  private Expr callable() {
-    if (match(IDENTIFIER)) {
-      Token identifier = previous();
-      Expr expr = new Var(identifier);
-
-      while (match(LEFT_PAREN)) 
-        expr = new Func(identifier, expr, series(RIGHT_PAREN, (_GetExpression)() -> expression()));
-      return expr;
-    }
-
     // Better: Throw an error, then catch and rethrow at expression() and funcDecl()
     // with different error messages.
-    throw error(peek(), "Expect identifier.");
+    throw error(peek(), "Unable to parse token.");
   }
 
   private <T extends Expr> Series<T> series(TokenType closingType, _GetExpression<T> getExpression) {
@@ -284,7 +326,7 @@ class Parser {
     return peek().type == type;
   }
   private Token advance() {
-    if (!isAtEnd()) current++;
+    if (!isAtEnd()) currentToken++;
     return previous();
   }
   private boolean isAtEnd() {
@@ -292,11 +334,11 @@ class Parser {
   }
 
   private Token peek() {
-    return tokens.get(current);
+    return tokens.get(currentToken);
   }
 
   private Token previous() {
-    return tokens.get(current - 1);
+    return tokens.get(currentToken - 1);
   }
   private ParseError error(Token token, String message) {
     Lox.error(token, message);

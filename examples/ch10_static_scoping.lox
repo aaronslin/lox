@@ -62,3 +62,15 @@ fun test_assert_fails_when_false() {
   assert(false);
 }
 assert_raises(test_assert_fails_when_false);
+
+fun test_static_scope() {
+  var a = 1;
+  fun f() {
+    return a;
+  }
+  {
+    var a = 2;
+    return f();
+  }
+}
+assert(test_static_scope() == 1);

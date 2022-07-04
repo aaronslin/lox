@@ -2,12 +2,14 @@ package com.craftinginterpreters.lox;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
 class Interpreter implements Expr.Visitor<Object>,
                              Statement.Visitor<Void> {
   Interpreter() {
     this.currentScope = new Scope(null);
-    this.recursionDepth = 0;
+    this.executionStack = new Stack<>();
+    this.callStack = new Stack<>();
 
     this.currentScope._declare("clock", NativeFunctions.CLOCK);
     this.currentScope._declare("assert", NativeFunctions.ASSERT);
@@ -17,17 +19,21 @@ class Interpreter implements Expr.Visitor<Object>,
   final static int MAX_RECURSION_DEPTH = 50;
 
   Scope currentScope;
-  int recursionDepth;
+  Stack<Statement> executionStack;
+  Stack<LoxCallable> callStack;
 
-  void interpret(List<Statement> statements) {
+  void interpret(Statement statement) {
     try {
-      for (Statement statement : statements) {
-        execute(statement);
-      }
+      execute(statement);
     } catch (RuntimeError error) {
       Lox.runtimeError(error);
     } catch (AssertionError error) {
       Lox.assertionError(error);
+    } catch (RuntimeException error) {
+      DebugInfo debugInfo = new DebugInfo(this);
+      Lox.javaError(new JavaError(statement, error), debugInfo);
+    } finally {
+      executionStack.clear();
     }
   }
 
@@ -36,7 +42,9 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   protected void execute(Statement stmt) {
+    executionStack.push(stmt);
     stmt.executeWith(this);
+    executionStack.pop();
   }
 
   static double toNum(Object obj) throws InterpreterCastException {
@@ -119,10 +127,10 @@ class Interpreter implements Expr.Visitor<Object>,
         case EQUAL_EQUAL: 
           return _equals(leftVal, rightVal);
         default:
-          throw new RuntimeError(binary.operator, "Binary operator is not supported.");
+          throw _runtimeError(binary.operator, "Binary operator is not supported.");
       }
     } catch (InterpreterCastException e) {
-      throw new RuntimeError(binary.operator, e.getMessage());
+      throw _runtimeError(binary.operator, e.getMessage());
     }
   }
 
@@ -135,10 +143,10 @@ class Interpreter implements Expr.Visitor<Object>,
       } else if (unary.operator.type == TokenType.MINUS) {
         return -toNum(exprValue);
       } else {
-        throw new RuntimeError(unary.operator, "Unary operator is not supported.");
+        throw _runtimeError(unary.operator, "Unary operator is not supported.");
       }
     } catch (InterpreterCastException e) {
-      throw new RuntimeError(unary.operator, e.getMessage());
+      throw _runtimeError(unary.operator, e.getMessage());
     }
   }
 
@@ -160,56 +168,120 @@ class Interpreter implements Expr.Visitor<Object>,
     } else if (logical.operator.type == TokenType.OR) {
       if (toBool(leftVal)) return leftVal;
     } else {
-      throw new RuntimeError(logical.operator, "Logical operator is not supported.");
+      throw _runtimeError(logical.operator, "Logical operator is not supported.");
     }
     return evaluate(logical.right);
   }
 
   @Override
   public Object evalVarExpr(Var varName) {
-    return currentScope.get(varName.name);
+    Token name = varName.name;
+    try {
+      return currentScope.get(name);
+    } catch (EnvironmentException e) {
+      throw _runtimeError(name, String.format("Variable '%s' not defined.", name));
+    }
   }
-
+  
   @Override
   public Object evalAssignExpr(Assign assign) {
-    Object value = evaluate(assign.expr);
-    currentScope.assign(assign.name, value);
-    return value;
+    if (assign.assignee instanceof Var) {
+      Var assignee = (Var) assign.assignee;
+      Object value = evaluate(assign.value);
+
+      try {
+        currentScope.assign(assignee.name, value);
+      } catch (EnvironmentException e) {
+        throw _runtimeError(assignee.name, "Undeclared variable cannot be assigned to.");
+      }
+      return value;
+    } else if (assign.assignee instanceof Property) {
+      Property assignee = (Property) assign.assignee;
+      Object _propertyLeft = evaluate(assignee.left);
+
+      if (!(_propertyLeft instanceof Fieldable)) {
+        throw _runtimeError(assignee.right, String.format("Cannot get property '%s' of non-class.", assignee.right.literal));
+      }
+
+      Fieldable propertyLeft = (Fieldable) _propertyLeft;
+      Object value = evaluate(assign.value);
+
+      try {
+        propertyLeft.setField(assignee.right, value);
+      } catch (EnvironmentException e) {
+        throw _runtimeError(assignee.right, String.format("Attribute '%s' cannot be assigned to.", assignee.right.lexeme));
+      }
+      return value;
+    } else {
+      throw _runtimeError(assign.token, "Invalid assignment target.");
+    }
   }
 
   @Override
-  public Object evalFuncExpr(Func func) {
-    // Check that func variable points to a valid LoxFunction;
-    // This may eventually need to be refactored to a evalCallable.
-    // Callable is a parser concept, while Function is an interpreter concept.
-    Object result = evaluate(func.callee);
-    if (!(result instanceof LoxCallable)) {
-      throw new RuntimeError(func.identifier, "Expression is not callable.");
+  public Object evalCallExpr(Call call) {
+    Object callee = evaluate(call.callee);
+    if (!(callee instanceof LoxCallable)) {
+      throw _runtimeError(call.token, "Expression is not callable.");
     }
 
-    LoxCallable loxCallable = (LoxCallable) result;
+    LoxCallable loxCallable = (LoxCallable) callee;
   
     // Evaluate arguments in outer scope
-    if (!loxCallable.isValidArity(func.arguments.size())) {
-      throw new RuntimeError(func.identifier, String.format("Expected %s arguments, but got %s.", loxCallable.arityString(), func.arguments.size()));
+    if (!loxCallable.isValidArity(call.arguments.size())) {
+      throw _runtimeError(call.token, String.format("Expected %s arguments, but got %s.", loxCallable.arityString(), call.arguments.size()));
     }
-    List<Object> args = evalSeries(func.arguments);
-
-    // (alin) should this evaluate args first or check recursion depth?
-    // Check recursion depth
-    if (recursionDepth > MAX_RECURSION_DEPTH) {
-      throw new RuntimeError(func.identifier, String.format("Maximum recursion depth reached: %s", MAX_RECURSION_DEPTH));
+    List<Object> args = evalSeries(call.arguments);
+    
+    // Check for maximum recursion depth.
+    // It would be cleaner for this to be called on every LoxCallable call.
+    // Right now, this check has to be done wherever `.call()` is invoked directly.
+    if (callStack.size() > MAX_RECURSION_DEPTH) {
+      throw _runtimeError(
+        call.token, 
+        String.format("Maximum recursion depth exceeded: %s", MAX_RECURSION_DEPTH)
+      );
     }
 
     // Call the function.
     Scope outerScope = currentScope;
+    callStack.push(loxCallable);
     try {
-      recursionDepth++;
       return loxCallable.call(this, args);
     } finally {
-      recursionDepth--;
-      // (alin) please check. 
+      callStack.pop();
       currentScope = outerScope;
+    }
+  }
+
+  @Override
+  public Object evalPropertyExpr(Property property) {
+    Object left = evaluate(property.left);
+
+    try {
+      return ((Fieldable) left).getField(property.right);
+    } catch (ClassCastException e) {
+      throw _runtimeError(
+        property.right, 
+        String.format("Cannot get property '%s' of non-class.", property.right.literal)
+      );
+    } catch (EnvironmentException e) {
+      throw _runtimeError(
+        property.right, 
+        String.format("Attribute '%s' not found.", property.right.literal)
+      );
+    }
+  }
+
+  @Override
+  public Object evalThisExpr(This expr) {
+    try {
+      LoxInstance owner = ((LoxMethod) callStack.peek()).owner;
+      if (owner != null) {
+        return owner;
+      }
+      throw _runtimeError(expr.token, "Can only call 'this' on bound methods.");
+    } catch (RuntimeException e) {
+      throw _runtimeError(expr.token, "Cannot call 'this' outside of an object method.");
     }
   }
 
@@ -302,42 +374,38 @@ class Interpreter implements Expr.Visitor<Object>,
     return null;
   }
 
-  // execute a function declaration
+  // Declares a function
   @Override
   public Void execFuncStmt(FuncStmt stmt) {
-    LoxFunction func = new LoxFunction(stmt, currentScope);
-    currentScope.declare(stmt.name.name, func);
+    LoxFunction func = new LoxFunction(stmt.name, stmt.parameters, stmt.body, currentScope);
+    currentScope.declare(stmt.name, func);
     return null;
   }
 
   @Override
   public Void execReturnStmt(ReturnStmt stmt) {
     if (currentScope.parent == null) {
-      throw new RuntimeError(stmt.token, "Cannot return out of global scope.");
+      throw _runtimeError(stmt.indicator, "Cannot return out of global scope.");
     }
     throw new ReturnException(evaluate(stmt.expr));
   }
+
+  @Override
+  public Void execClassStmt(ClassStmt stmt) {
+    LoxClass loxClass;
+
+    Scope outerScope = currentScope;
+    try {
+      loxClass = new LoxClass(stmt, this);
+    } finally {
+      currentScope = outerScope;
+    }
+
+    currentScope.declare(stmt.name, loxClass);
+    return null;
+  }
+
+  private RuntimeError _runtimeError(Token token, String message) {
+    return new RuntimeError(token, message).withInterpreterState(this);
+  }
 }
-
-/* 
-Notes:
- - Here I execute an Expr tree. (As opposed to compiling to machine code or other options)
- - Lox is dynamically typed but Java is static!
-
-Corrections:
-0 / 0 (returns NaN, but should throw error)
-
-Misleading error messages:
-)
-5 + "hi"
-5 hi ("Cannot end with expression")
----- ("Must start with expression")
-
-Feature differences:
- - the book's interpreter doesn't allow addition on booleans. 
- - the book's interpreter evaluates strings (even "") to true. Mine throws.
- - My interpreter lacks an interpret() method to map Java output values into
-   Lox string that is shown to the user.
- - the book's interpreter uses the visitor pattern to write the evaluate()
-   methods in the Interpreter, instead of scattering it into the Expr classes.
-*/

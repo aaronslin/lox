@@ -1,18 +1,21 @@
 package com.craftinginterpreters.lox;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 abstract class Printable {
-  public List<? extends Printable> _printables = Arrays.asList();
+  public List<Printable> _printables = new ArrayList<>();
 
   public void printClass(String prefix, String text) {
     System.out.printf(prefix + this.getClass().getSimpleName() + ": " + text + "%n");
   }
 
   public void print() {
+    // (alin) this indexing is not safe!
     String caller = Thread.currentThread().getStackTrace()[2].getMethodName();
-    System.out.println(caller);
+    String callerParent = Thread.currentThread().getStackTrace()[3].getMethodName();
+    System.out.printf("Caller: '%s.%s'\n", callerParent, caller);
     print("", true);
   }
 
@@ -34,8 +37,8 @@ abstract class Lexeme extends Printable {}
 
 class Token extends Lexeme {
   final TokenType type;
-  final String lexeme;
-  final Object literal;
+  final String lexeme; // The literal string from parsing, for error reporting.
+  final Object literal; // The lex'ed object.
   final int line; // [location]
 
   Token(TokenType type, String lexeme, Object literal, int line) {
