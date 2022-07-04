@@ -12,12 +12,13 @@ class DebugInfo {
   final Stack<LoxCallable> callStack;
 
   // Not sure how to populate this yet to inspect the variables.
-  // final Scope environment;
+  final Scope environment;
 
 
   DebugInfo(Interpreter interpreter) {
     this.executionStack = new Stack<Statement>();
     this.callStack = new Stack<LoxCallable>();
+    this.environment = interpreter.currentScope.copyValues();
 
     this.executionStack.addAll(interpreter.executionStack);
     this.callStack.addAll(interpreter.callStack);

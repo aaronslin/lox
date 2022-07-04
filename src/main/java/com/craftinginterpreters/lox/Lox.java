@@ -81,27 +81,27 @@ public class Lox {
   }
   static void runtimeError(RuntimeError error) {
     System.err.println("\n[RUNTIME ERROR]");
-    printLoxStackTrace(error.debugInfo);
+    printDebugInfo(error.debugInfo);
     System.err.println(error.getMessage() +
         "\n[line " + error.token.line + "]");
     hadRuntimeError = true;
   }
   static void assertionError(AssertionError error) {
     System.err.println("\n[ASSERTION ERROR]");
-    printLoxStackTrace(error.debugInfo);
+    printDebugInfo(error.debugInfo);
     System.err.println(error.getMessage());
     hadRuntimeError = true;
   }
   // TODO: modify javaError to encapsulate debugInfo
   static void javaError(JavaError error, DebugInfo debugInfo) {
     System.err.println("\n[FATAL]");
-    printLoxStackTrace(debugInfo);
+    printDebugInfo(debugInfo);
     error.error.printStackTrace();
     System.err.println(error.error);
     hadRuntimeError = true;
   }
 
-  static void printLoxStackTrace(DebugInfo debugInfo) {
+  static void printDebugInfo(DebugInfo debugInfo) {
     for (Statement stmt : debugInfo.executionStack) {
       System.err.printf("[line %s]\n", stmt.indicator.line);
       stmt.print();
@@ -111,5 +111,8 @@ public class Lox {
     for (LoxCallable callable : debugInfo.callStack) {
       System.err.println("  " + callable);
     }
+
+    System.err.println("Environment:");
+    debugInfo.environment.print();
   }
 }

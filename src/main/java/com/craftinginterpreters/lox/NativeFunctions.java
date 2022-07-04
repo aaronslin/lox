@@ -55,7 +55,7 @@ class NativeFunctions {
     @Override
     public Object call(Interpreter interpreter, List<Object> arguments) {
       if (!(arguments.get(0) instanceof LoxCallable)) {
-        throw new AssertionError("Expect signature: assert_raises(function, args...)")
+        throw new AssertionError("Expected signature: assert_raises(function, args...)")
           .withInterpreterState(interpreter);
       }
       LoxCallable target_func = (LoxCallable) arguments.get(0);

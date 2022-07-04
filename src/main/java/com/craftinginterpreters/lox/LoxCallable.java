@@ -175,6 +175,7 @@ class LoxClass extends Fieldable implements LoxCallable {
   }
 }
 
+// TODO: It would be nice for LoxInstance (and Class) to be printable, so that its fields can be inspected.
 class LoxInstance extends Fieldable {
   LoxInstance(LoxClass loxClass) {
     this.classToken = loxClass.token;
