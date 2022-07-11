@@ -186,7 +186,7 @@ bar(() -> foo());
   - my implementation throws a RuntimeError when executing `return` in global scope.
   - my implementation lacks a maximum argument length
 
-Ch. 11
+### Ch. 11
 
 - Book uses persistent data structures to split environments. Not sure how they're efficient, but they sound interesting.
 - This is a really good observation: "We know static scope means that a variable usage always resolves to the same declaration, which can be determined just by looking at the text. Given that, why are we doing it dynamically every time? Doing so doesn’t just open the hole that leads to our annoying bug, it’s also needlessly slow."
@@ -213,7 +213,7 @@ This means that there is a moment during variable declaration when it is unavail
   Because variable declarations can be initialized to an expr that refers to the same variable name. In this case, it is ambiguous which scope that variable refers to.
   OTOH, a function body and parameters are always defined in a new scope created by the function, sidestepping the potential ambiguity.
 
-Ch. 13
+### Ch. 12
 
 - Good error handling system: Two parts: Parsing and Interpreting
   Parsing: "error at blah" should refer to the line with blah, not the preceding line.
@@ -289,3 +289,91 @@ LoxCallable(Interpreter, args)
  
 */ 
 ```
+
+##### Book notes
+ 
+* Book takes approach of "instances are loose bags of data and you can add/remove fields as needed". Mine is a lot less flexible.
+  This is why they use a `HashMap` to track fields instead of an `Environment`
+* Book broke the problem into smaller pieces by first starting with classes/instances with no custom constructors
+* Book has `((call '.')? IDENTIFIER '=' assignment) | or` for parsing the LHS of an assignment, while mine is just:
+  `or ('=' assignment)?`. Surely these aren't equivalent. For example, `2 = 1` would be a runtime not parsing exception in my interpreter.
+  I wonder if `(a) = 1` works for book's?
+* Book also nicely introduces a `setter` object to represent assignment to an `a.b` (different from an assign). I think it's nice that
+  their parser instead of their interpreter handles this.
+* I fail this test case (Lua/JS prints "bill", Python prints "jane". Mine also prints "jane" because I bind `this` to the method.):
+
+```
+class Person {
+  sayName() {
+    print this.name;
+  }
+}
+
+var jane = Person();
+jane.name = "Jane";
+
+var bill = Person();
+bill.name = "Bill";
+
+bill.sayName = jane.sayName;
+bill.sayName(); // ?
+```
+  I did not fix this in my test cases because of the dilemma of whether `this` should be associated with the method or computed by the
+  interpreter. I couldn't see a way to make it so that class method updates propagate to the instances, but instance method updates don't
+  propagate to the class.
+
+* When a `get` is called in book's implementation, it still looks up the class's method. This would pass the `test_instance_class_fields` test i.e.
+
+Mine:
+
+```
+Class:
+  |_ method
+Instance1
+  |_ new method
+Instance2
+  |_ new method
+```
+
+Book's:
+
+```
+Class:
+Instance1:
+Instance2:
+  |_ method
+```
+
+
+* Book implements `this` very similar to how I originally conceived of it. You nest it into an environment so that it looks like below,
+  and then add a `bind` method that wraps the original `LoxFunction` method in another `LoxFunction`. This is simpler than creating
+  a LoxMethod.
+
+```
+global env
+|_ env with only 'this'
+   |_ local env
+```
+
+So all in all, this is the lifecycle of `cat.method()`:
+  - when `Cat` is defined, the method definition is added to the _class's_ bag of methods.
+  - when `cat.method` is looked-up, it finds `method` in the class's bag of methods, and binds it to `cat`.
+    - binding effectively does this. This enables all instances to reuse the same class method, but isolating
+      which objects they are bound to:
+      ```
+      def bind(method, instance):
+        env = new Environment(method.environment);
+        env.define("this", instance);
+        return new LoxFunction(method, env);
+      ```
+  - `method()` is called, like any other closure.
+
+* Book also has a precedence of fields over methods. So `get` just does 2 lookups, which is fine.
+* Book avoids relying on a callstack to detect invalid uses of `this`, but detecting it at resolution time.
+* Book avoids defining a default init, ... by simply skipping the `callConstructor` step if `init` isn't defined.
+* Banning `init` calls:
+  * Looks like they didn't have a great answer to how to ban outside `init` calls either. They just short-circuit
+    the `LoxInstance.call` method if the name matches `init`. I just don't store it as a method.
+  * Bans `return` from init.
+
+Overall: I think I thought of most of the edge cases, and often made different choices from the book.

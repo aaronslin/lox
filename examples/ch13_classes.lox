@@ -467,10 +467,3 @@ fun test_no_this_leak() {
   assert_raises(bad);
 }
 test_no_this_leak();
-
-
-// left off here
-// fails: to set `this.x = 1` in the constructor bc of how this is set.
-// fails: test_cannot_override_this
-// fix the first test
-// nested classes not allowed
